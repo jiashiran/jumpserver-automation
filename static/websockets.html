@@ -4,7 +4,17 @@
 <!-- when clicked then an iris websocket event will be sent to the server,
 at this example we registered the 'chat' -->
 <button onclick="send()">Send</button>
-<hr /><hr />
+<hr />
+        <div id="LOGIN">
+            用户名：<input id="user" type="text" />
+            密码：<input id="password" type="password" />
+            <button onclick="login()">登录</button>
+        </div>
+        <div id="MFA">
+            [MFA]:<input id="mfa" type="text" />
+            <button onclick="loginmfa()">登录</button>
+        </div>
+<hr />
 <!-- the messages will be shown here -->
 <div  id="scrolldIV" style="overflow:auto; height: 500px; width: 100%; border: 1px solid #999; color: red">
     <b><pre id="output" ></pre></b>
@@ -46,9 +56,9 @@ at this example we registered the 'chat' -->
     function addMessage(msg) {
         output.innerHTML += msg + "\n";
         add()
-        /*if(msg.contains("token:")){
-            input.value = msg;
-        }*/
+        if(msg.indexOf("token:") != -1){
+            input.value ="token:";
+        }
         //console.log(msg)
     }
 
@@ -56,5 +66,13 @@ at this example we registered the 'chat' -->
         var div = document.getElementById('scrolldIV');
         //div.innerHTML = div.innerHTML + 'time_' + now.getTime() + '<br />';
         div.scrollTop = div.scrollHeight;
+    }
+
+    function login() {
+        document.getElementById("input");
+    }
+
+    function loginmfa() {
+
     }
 </script>
