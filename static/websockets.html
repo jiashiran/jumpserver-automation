@@ -11,7 +11,7 @@ at this example we registered the 'chat' -->
             <button onclick="login()">登录</button>
         </div>
         <div id="MFA">
-            [MFA]:<input id="mfa" type="text" />
+            [MFA auth]:<input id="mfa" type="text" />
             <button onclick="loginmfa()">登录</button>
         </div>
 <hr />
@@ -48,7 +48,7 @@ at this example we registered the 'chat' -->
     });
 
     function send() {
-        addMessage("Me: " + input.value); // write ourselves
+        addMessage(input.value); // write ourselves
         socket.Emit("chat", input.value); // send chat event data to the websocket server
         input.value = ""; // clear the input
     }
@@ -56,8 +56,8 @@ at this example we registered the 'chat' -->
     function addMessage(msg) {
         output.innerHTML += msg + "\n";
         add()
-        if(msg.indexOf("token:") != -1){
-            input.value ="token:";
+        if(msg.indexOf("[MFA auth]:") != -1){
+            input.value = msg
         }
         //console.log(msg)
     }

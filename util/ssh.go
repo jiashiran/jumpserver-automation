@@ -15,10 +15,49 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
-var  OUT = make(chan string,100)
-var  IN = make(chan string)
+var OUT = make(chan string, 100)
+var IN = make(chan string)
+
+func Jump(c websocket.Connection) {
+
+	client, err := NewJumpserverClient(&JumpserverConfig{
+		User:     "",
+		Password: "",
+		Ip:       "",
+		Port:     0,
+	}, c)
+	if err != nil {
+		log.Fatal("gt client err:", err)
+	}
+
+	session := NewSession(client)
+
+	session.SendCommand("g")
+
+	time.Sleep(3 * time.Second)
+
+	session.SendCommand("g24")
+
+	time.Sleep(3 * time.Second)
+
+	session.SendCommand("1")
+
+	time.Sleep(3 * time.Second)
+
+	session.SendCommand("sudo su -")
+
+	time.Sleep(3 * time.Second)
+
+	session.SendCommand("free")
+
+	time.Sleep(3 * time.Second)
+
+	session.Close()
+}
+
 type JumpserverConfig struct {
 	User     string
 	Password string
@@ -26,7 +65,7 @@ type JumpserverConfig struct {
 	Port     int
 }
 
-func NewJumpserverClient(conf *JumpserverConfig,c websocket.Connection) (*ssh.Client, error) {
+func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection) (*ssh.Client, error) {
 	var config ssh.ClientConfig
 	var authMethods []ssh.AuthMethod
 	authMethods = append(authMethods, ssh.Password(conf.Password))
@@ -34,24 +73,25 @@ func NewJumpserverClient(conf *JumpserverConfig,c websocket.Connection) (*ssh.Cl
 		answers := make([]string, 0, len(questions))
 		for i, q := range questions {
 			fmt.Print(q)
-			//c.Emit("chat","token:"+q)
+			c.Emit("chat", q)
 			if echos[i] {
-				scan := bufio.NewScanner(os.Stdin)
+				/*scan := bufio.NewScanner(os.Stdin)
 				if scan.Scan() {
 					answers = append(answers, scan.Text())
 				}
 				err := scan.Err()
 				if err != nil {
 					return nil, err
-				}
-
-				//answers = append(answers, <- IN)
+				}*/
+				MFA := <-IN
+				fmt.Println("MFA:", MFA)
+				answers = append(answers, MFA)
 			} else {
 				b, err := terminal.ReadPassword(int(syscall.Stdin))
 				if err != nil {
 					return nil, err
 				}
-				fmt.Println()
+				fmt.Println("aaa")
 				answers = append(answers, string(b))
 			}
 		}
@@ -82,7 +122,7 @@ func NewSession(client *ssh.Client) *JumpserverSession {
 	out := &Output{make(chan string)}
 	session.Stdout = out
 	session.Stderr = os.Stderr
-	session.Setenv("LANG","zh_CN.UTF-8")
+	session.Setenv("LANG", "zh_CN.UTF-8")
 	modes := ssh.TerminalModes{
 		ssh.ECHO:          0,
 		ssh.TTY_OP_ISPEED: 14400,
@@ -106,8 +146,8 @@ func NewSession(client *ssh.Client) *JumpserverSession {
 
 type JumpserverSession struct {
 	*ssh.Session
-	In     *Input
-	out    *Output
+	In  *Input
+	out *Output
 }
 
 func (s *JumpserverSession) SendCommand(command string) {
@@ -140,7 +180,7 @@ func (in *Input) Read(p []byte) (n int, err error) {
 }
 
 type Output struct {
-	out    chan string
+	out chan string
 }
 
 func (out *Output) Write(p []byte) (n int, err error) {
@@ -173,7 +213,6 @@ func (out *Output) Write(p []byte) (n int, err error) {
 
 	session.Close()
 }*/
-
 
 func GetSftp(client *ssh.Client) *sftp.Client {
 	sftp, err := sftp.NewClient(client)
