@@ -1,10 +1,14 @@
 package websocket
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/kataras/iris"
+	"github.com/kataras/iris/context"
 	"github.com/kataras/iris/websocket"
 	"golang.org/x/crypto/ssh"
+	"io/ioutil"
+	"jumpserver-automation/store"
 	"jumpserver-automation/util"
 	"log"
 	"strings"
@@ -24,6 +28,42 @@ func Service() {
 
 	app.Get("/", func(ctx iris.Context) {
 		ctx.ServeFile("static/websockets.html", false) // second parameter: enable gzip?
+	})
+
+	app.Get("/tasks/list", func(context context.Context) {
+		m := store.SelectAll()
+		b, _ := json.Marshal(m)
+		context.Write(b)
+	})
+
+	app.Get("/task", func(context context.Context) {
+		uri := context.Request().RequestURI
+		id := strings.Split(uri, "?")[1]
+		id = strings.Split(id, "=")[1]
+		log.Println(id)
+		m := store.Select(id)
+		context.Write([]byte(m))
+	})
+
+	app.Post("/task/update", func(context context.Context) {
+		uri := context.Request().RequestURI
+		log.Println(uri)
+		id := strings.Split(uri, "?")[1]
+		id = strings.Split(id, "=")[1]
+		log.Println("id:", id)
+		body, err := ioutil.ReadAll(context.Request().Body)
+		if err != nil {
+			log.Println(err)
+			context.Write([]byte(err.Error()))
+		} else {
+			store.Update(id, string(body))
+			context.Write(body)
+		}
+
+	})
+
+	app.Get("/tasks/delete", func(context context.Context) {
+		context.Write([]byte("aaasdasdasd"))
 	})
 
 	setupWebsocket(app)
@@ -67,9 +107,10 @@ func handleConnection(c websocket.Connection) {
 			log.Println(ws.ID, msg)
 		}
 
-		if "jump" == msg {
+		if strings.Contains(msg, "jump") {
+			ms := strings.Split(msg, "|")
 			go func() {
-				util.Jump(c)
+				util.Jump(ms[1], ms[2], "", 0, c)
 			}()
 			go func() {
 

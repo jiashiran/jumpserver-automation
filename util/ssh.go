@@ -21,13 +21,13 @@ import (
 var OUT = make(chan string, 100)
 var IN = make(chan string)
 
-func Jump(c websocket.Connection) {
+func Jump(user string, password string, ip string, port int, c websocket.Connection) {
 
 	client, err := NewJumpserverClient(&JumpserverConfig{
-		User:     "",
-		Password: "",
-		Ip:       "",
-		Port:     0,
+		User:     user,
+		Password: password,
+		Ip:       ip,
+		Port:     port,
 	}, c)
 	if err != nil {
 		log.Fatal("gt client err:", err)

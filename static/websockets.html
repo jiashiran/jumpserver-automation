@@ -1,20 +1,23 @@
-<!-- the message's input -->
-<input id="input" type="text" />
+<div id="tasks">
+    <select id="all_task" onchange="getTask(this.options[this.options.selectedIndex].value)">
+        <option>选择</option>
+    </select>
 
-<!-- when clicked then an iris websocket event will be sent to the server,
-at this example we registered the 'chat' -->
-<button onclick="send()">Send</button>
-<hr />
-        <div id="LOGIN">
-            用户名：<input id="user" type="text" />
-            密码：<input id="password" type="password" />
-            <button onclick="login()">登录</button>
-        </div>
-        <div id="MFA">
-            [MFA auth]:<input id="mfa" type="text" />
-            <button onclick="loginmfa()">登录</button>
-        </div>
-<hr />
+    <button onclick="updateTask()">提交</button><button onclick="del()">删除</button>
+    &nbsp &nbsp
+    Jumpserver Username：<input id="user" type="text" />
+    Jumpserver Password：<input id="password" type="password" />
+    <button onclick="login()">登录</button>
+    <input id="mfa" type="text" />
+    <button onclick="mfalogin()">输入MFA</button>
+    &nbsp &nbsp
+    <button onclick="execute()">执行</button>
+    <br/>
+    <textarea id="task" style="overflow:auto; height: 100px; width: 100%; border: 1px solid #999;"></textarea>
+</div>
+
+<hr/>
+<hr/>
 <!-- the messages will be shown here -->
 <div  id="scrolldIV" style="overflow:auto; height: 500px; width: 100%; border: 1px solid #999; color: red">
     <b><pre id="output" ></pre></b>
@@ -29,7 +32,6 @@ at this example we registered the 'chat' -->
     // see app.Get("/echo", ws.Handler()) on main.go
     var wsURL = scheme + "://" + document.location.hostname + port+"/echo";
 
-    var input = document.getElementById("input");
     var output = document.getElementById("output");
 
     // Ws comes from the auto-served '/iris-ws.js'
@@ -47,32 +49,84 @@ at this example we registered the 'chat' -->
         addMessage(msg);
     });
 
-    function send() {
-        addMessage(input.value); // write ourselves
-        socket.Emit("chat", input.value); // send chat event data to the websocket server
-        input.value = ""; // clear the input
-    }
 
     function addMessage(msg) {
         output.innerHTML += msg + "\n";
         add()
         if(msg.indexOf("[MFA auth]:") != -1){
-            input.value = msg
+            document.getElementById("mfa").value = msg
         }
-        //console.log(msg)
     }
 
     function add() {
         var div = document.getElementById('scrolldIV');
-        //div.innerHTML = div.innerHTML + 'time_' + now.getTime() + '<br />';
         div.scrollTop = div.scrollHeight;
     }
 
     function login() {
-        document.getElementById("input");
+        user = document.getElementById("user").value;
+        password = document.getElementById("password").value;
+        console.log(user,password)
+        socket.Emit("chat", "jump|"+user+"|"+password);
     }
 
-    function loginmfa() {
-
+    function mfalogin() {
+        socket.Emit("chat", document.getElementById("mfa").value);
     }
+
+    window.onload=function (){
+
+        loadTasks();
+
+    };
+
+    // 创建查询员工方法
+    function loadTasks() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/tasks/list');
+        xhr.send();
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    var data = JSON.parse(xhr.responseText); //json解析方法JSON.parse 或者 eval('('+xhr.responseText+')')
+                    for (var o in data){
+                        console.log(o,data[o]);
+                        document.getElementById("all_task").innerHTML += '<option>'+o+'</option>'
+                    }
+                }
+            }
+        }
+    }
+    function getTask(id) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/task?id='+id);
+        xhr.send();
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    console.log(xhr.responseText);
+                    document.getElementById("task").innerHTML=xhr.responseText;
+                }
+            }
+        }
+    }
+    function updateTask() {
+        var task =  document.getElementById("task").innerHTML;
+        var obj = document.getElementById("all_task");
+        var index = obj.selectedIndex; // 选中索引
+        var text = obj.options[index].text; // 选中文本
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/task/update?id='+text);
+        xhr.setRequestHeader("Content-type","application/text");
+        xhr.send(task);
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    console.log(xhr.responseText);
+                    document.getElementById("task").innerHTML=xhr.responseText;
+                }
+            }
+        }
+    }
+
 </script>
