@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/kataras/iris"
 	"github.com/kataras/iris/context"
+	"github.com/kataras/iris/middleware/recover"
 	"github.com/kataras/iris/websocket"
 	"golang.org/x/crypto/ssh"
 	"io/ioutil"
@@ -25,7 +26,7 @@ type WsSesion struct {
 
 func Service() {
 	app := iris.New()
-
+	app.Use(recover.New())
 	app.Get("/", func(ctx iris.Context) {
 		ctx.ServeFile("static/websockets.html", false) // second parameter: enable gzip?
 	})
@@ -40,9 +41,19 @@ func Service() {
 		uri := context.Request().RequestURI
 		id := strings.Split(uri, "?")[1]
 		id = strings.Split(id, "=")[1]
-		log.Println(id)
+		log.Println("get task", id)
 		m := store.Select(id)
 		context.Write([]byte(m))
+	})
+
+	app.Get("/task/execute", func(context context.Context) {
+		uri := context.Request().RequestURI
+		id := strings.Split(uri, "?")[1]
+		id = strings.Split(id, "=")[1]
+		log.Println("execute task :", id)
+		m := store.Select(id)
+		util.Execute(m)
+		context.Write([]byte("ok"))
 	})
 
 	app.Post("/task/update", func(context context.Context) {
@@ -50,7 +61,7 @@ func Service() {
 		log.Println(uri)
 		id := strings.Split(uri, "?")[1]
 		id = strings.Split(id, "=")[1]
-		log.Println("id:", id)
+		log.Println("update task:", id)
 		body, err := ioutil.ReadAll(context.Request().Body)
 		if err != nil {
 			log.Println(err)
@@ -62,8 +73,13 @@ func Service() {
 
 	})
 
-	app.Get("/tasks/delete", func(context context.Context) {
-		context.Write([]byte("aaasdasdasd"))
+	app.Get("/task/delete", func(context context.Context) {
+		uri := context.Request().RequestURI
+		id := strings.Split(uri, "?")[1]
+		id = strings.Split(id, "=")[1]
+		log.Println("delete task", id)
+		store.Delete(id)
+		context.Write([]byte(id + " deleted ok"))
 	})
 
 	setupWebsocket(app)
@@ -72,7 +88,10 @@ func Service() {
 	// http://localhost:8080
 	// http://localhost:8080
 	// write something, press submit, see the result.
-	app.Run(iris.Addr(":8080"))
+	app.Run(iris.Addr(":8080"), iris.WithoutServerError(iris.ErrServerClosed))
+	defer func() {
+		store.Close()
+	}()
 }
 
 func setupWebsocket(app *iris.Application) {

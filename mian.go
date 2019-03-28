@@ -1,12 +1,7 @@
 package main
 
 import (
-	"fmt"
-	"jumpserver-automation/store"
 	"jumpserver-automation/websocket"
-	"os"
-	"os/signal"
-	"syscall"
 )
 
 
@@ -14,20 +9,20 @@ func main() {
 
 	websocket.Service()
 
-	WaitStop()
+	//WaitStop()
 }
 
 
-func WaitStop()  {
+/*func WaitStop()  {
 	// Go signal notification works by sending `os.Signal`
 	// values on a channel. We'll create a channel to
 	// receive these notifications (we'll also make one to
 	// notify us when the program can exit).
-	sigs := make(chan os.Signal, 1)
+	sigs := make(chan os.Signal)
 	done := make(chan bool, 1)
 	// `signal.Notify` registers the given channel to
 	// receive notifications of the specified signals.
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigs, syscall.SIGILL, syscall.SIGTRAP, syscall.SIGABRT, syscall.SIGBUS, syscall.SIGFPE, syscall.SIGKILL,syscall.SIGSEGV,syscall.SIGPIPE,syscall.SIGALRM,syscall.SIGTERM)
 	// This goroutine executes a blocking receive for
 	// signals. When it gets one it'll print it out
 	// and then notify the program that it can finish.
@@ -44,4 +39,4 @@ func WaitStop()  {
 	fmt.Println("awaiting signal")
 	<-done
 	fmt.Println("exiting")
-}
+}*/

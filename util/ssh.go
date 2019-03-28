@@ -18,11 +18,14 @@ import (
 	"time"
 )
 
-var OUT = make(chan string, 100)
-var IN = make(chan string)
+var (
+	OUT               = make(chan string, 100)
+	IN                = make(chan string)
+	jumpserverSession *JumpserverSession
+	loginServer       = false
+)
 
 func Jump(user string, password string, ip string, port int, c websocket.Connection) {
-
 	client, err := NewJumpserverClient(&JumpserverConfig{
 		User:     user,
 		Password: password,
@@ -33,29 +36,43 @@ func Jump(user string, password string, ip string, port int, c websocket.Connect
 		log.Fatal("gt client err:", err)
 	}
 
-	session := NewSession(client)
+	jumpserverSession = NewSession(client)
 
-	session.SendCommand("g")
+}
 
-	time.Sleep(3 * time.Second)
+func Execute(task string) {
+	commands := strings.Split(task, "\n")
 
-	session.SendCommand("g24")
+	for i, m := range commands {
+		log.Println(i, m)
+		ms := strings.Split(m, " ")
+		if ms[0] == "LOGIN" {
+			jumpserverSession.SendCommand(ms[1])
+			time.Sleep(3 * time.Second)
+		} else if ms[0] == "LOGOUT" {
+			for loginServer == true {
+				log.Println("loginServer:", loginServer)
+				jumpserverSession.SendCommand("exit")
+				time.Sleep(3 * time.Second)
+			}
+		} else if ms[0] == "SHELL" {
+			log.Println("shell")
+			jumpserverSession.SendCommand(strings.ReplaceAll(m, "SHELL", ""))
+			time.Sleep(3 * time.Second)
+			err := jumpserverSession.Signal(ssh.SIGINT)
+			if err != nil {
+				log.Println("SIGINT:", err)
+			}
+		} else if ms[0] == "LB" {
 
-	time.Sleep(3 * time.Second)
+		} else if ms[0] == "CHECK" {
 
-	session.SendCommand("1")
+		}
+	}
+}
 
-	time.Sleep(3 * time.Second)
+func check() {
 
-	session.SendCommand("sudo su -")
-
-	time.Sleep(3 * time.Second)
-
-	session.SendCommand("free")
-
-	time.Sleep(3 * time.Second)
-
-	session.Close()
 }
 
 type JumpserverConfig struct {
@@ -189,6 +206,12 @@ func (out *Output) Write(p []byte) (n int, err error) {
 		return -1, io.EOF
 	}
 	output := string(p)
+	if strings.Contains(output, "Opt>") {
+		loginServer = false
+	}
+	if loginServer == false && (strings.Contains(output, "$") || strings.Contains(output, "#")) {
+		loginServer = true
+	}
 	OUT <- output
 	//log.Println("output:", output)
 	return len(p), nil

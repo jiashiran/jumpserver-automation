@@ -1,17 +1,15 @@
 <div id="tasks">
-    <select id="all_task" onchange="getTask(this.options[this.options.selectedIndex].value)">
-        <option>选择</option>
-    </select>
-
-    <button onclick="updateTask()">提交</button><button onclick="del()">删除</button>
-    &nbsp &nbsp
+    <select id="all_task" onchange="getTask(this.options[this.options.selectedIndex].value)"><option>select</option></select>
+    <button onclick="updateTask()">更新</button><button onclick="del()">删除</button>
+    &nbsp
     Jumpserver Username：<input id="user" type="text" />
-    Jumpserver Password：<input id="password" type="password" />
+    Password：<input id="password" type="password" />
     <button onclick="login()">登录</button>
     <input id="mfa" type="text" />
     <button onclick="mfalogin()">输入MFA</button>
-    &nbsp &nbsp
+    &nbsp
     <button onclick="execute()">执行</button>
+    任务名：<input id="taskName" type="text" /><button onclick="save()">新建任务</button>
     <br/>
     <textarea id="task" style="overflow:auto; height: 100px; width: 100%; border: 1px solid #999;"></textarea>
 </div>
@@ -66,7 +64,7 @@
     function login() {
         user = document.getElementById("user").value;
         password = document.getElementById("password").value;
-        console.log(user,password)
+        //console.log(user,password)
         socket.Emit("chat", "jump|"+user+"|"+password);
     }
 
@@ -105,13 +103,14 @@
             if (xhr.readyState == 4) {
                 if (xhr.status = 200) {
                     console.log(xhr.responseText);
-                    document.getElementById("task").innerHTML=xhr.responseText;
+                    document.getElementById("task").value=xhr.responseText;
                 }
             }
         }
     }
+
     function updateTask() {
-        var task =  document.getElementById("task").innerHTML;
+        var task =  document.getElementById("task").value;
         var obj = document.getElementById("all_task");
         var index = obj.selectedIndex; // 选中索引
         var text = obj.options[index].text; // 选中文本
@@ -123,7 +122,58 @@
             if (xhr.readyState == 4) {
                 if (xhr.status = 200) {
                     console.log(xhr.responseText);
-                    document.getElementById("task").innerHTML=xhr.responseText;
+                    document.getElementById("task").value=xhr.responseText;
+                }
+            }
+        }
+    }
+
+    function save() {
+        var task =  document.getElementById("task").value;
+        var text = document.getElementById("taskName").value; // 选中文本
+        console.log(text);
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/task/update?id='+text);
+        xhr.setRequestHeader("Content-type","application/text");
+        xhr.send(task);
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    console.log(xhr.responseText);
+                    document.getElementById("task").value=xhr.responseText;
+                }
+            }
+        }
+    }
+
+    function del() {
+        var obj = document.getElementById("all_task");
+        var index = obj.selectedIndex; // 选中索引
+        var id = obj.options[index].text; // 选中文本
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/task/delete?id='+id);
+        xhr.send();
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    console.log(xhr.responseText);
+                    loadTasks();
+                }
+            }
+        }
+    }
+
+    function execute() {
+        var obj = document.getElementById("all_task");
+        var index = obj.selectedIndex; // 选中索引
+        var id = obj.options[index].text; // 选中文本
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/task/execute?id=' + id);
+        xhr.send();
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    alert(xhr.responseText);
                 }
             }
         }
