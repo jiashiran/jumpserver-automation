@@ -9,6 +9,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
 	"io"
+	"jumpserver-automation/session"
 	"log"
 	"net"
 	"os"
@@ -19,60 +20,68 @@ import (
 )
 
 var (
-	OUT               = make(chan string, 100)
-	IN                = make(chan string)
-	jumpserverSession *JumpserverSession
-	loginServer       = false
+
+	//jumpserverSession *JumpserverSession
 )
 
-func Jump(user string, password string, ip string, port int, c websocket.Connection) {
+func Jump(user string, password string, ip string, port int, c websocket.Connection,wsSesion session.WsSesion) (*ssh.Client,*session.JumpserverSession) {
 	client, err := NewJumpserverClient(&JumpserverConfig{
 		User:     user,
 		Password: password,
 		Ip:       ip,
 		Port:     port,
-	}, c)
+	}, c,wsSesion)
 	if err != nil {
 		log.Fatal("gt client err:", err)
 	}
 
-	jumpserverSession = NewSession(client)
+	jumpserverSession := NewSession(client,wsSesion)
 
+	return client,jumpserverSession
 }
 
-func Execute(task string) {
+func Execute(wsSesion session.WsSesion,task string) {
 	commands := strings.Split(task, "\n")
 
 	for i, m := range commands {
 		log.Println(i, m)
 		ms := strings.Split(m, " ")
 		if ms[0] == "LOGIN" {
-			jumpserverSession.SendCommand(ms[1])
+			wsSesion.Session.SendCommand(ms[1])
 			time.Sleep(3 * time.Second)
 		} else if ms[0] == "LOGOUT" {
-			for loginServer == true {
-				log.Println("loginServer:", loginServer)
-				jumpserverSession.SendCommand("exit")
+			for wsSesion.LoginServer == true {
+				log.Println("loginServer:", wsSesion.LoginServer)
+				wsSesion.Session.SendCommand("exit")
 				time.Sleep(3 * time.Second)
 			}
 		} else if ms[0] == "SHELL" {
 			log.Println("shell")
-			jumpserverSession.SendCommand(strings.ReplaceAll(m, "SHELL", ""))
+			wsSesion.Session.SendCommand(strings.ReplaceAll(m, "SHELL", ""))
 			time.Sleep(3 * time.Second)
-			err := jumpserverSession.Signal(ssh.SIGINT)
+			/*err := jumpserverSession.Signal(ssh.SIGINT)
 			if err != nil {
 				log.Println("SIGINT:", err)
-			}
+			}*/
 		} else if ms[0] == "LB" {
 
 		} else if ms[0] == "CHECK" {
-
+			check(wsSesion,ms[1])
 		}
 	}
 }
 
-func check() {
-
+func check(wsSesion session.WsSesion,url string) {
+	command := "curl_check=`curl -I -m 10 -o /dev/null -s -w %{http_code} "+url+"`"
+	wsSesion.Session.SendCommand(command)
+	wsSesion.Session.CheckURL = url + " is 200ok"
+	wsSesion.Session.CheckCommand = "echo `if [ $curl_check == 200 ]; then echo \""+wsSesion.Session.CheckURL+"\"; fi`"
+	for wsSesion.Session.Health = false ; !wsSesion.Session.Health;  {
+		log.Println("check url:",url)
+		wsSesion.Session.SendCommand("curl -I -m 10 -s "+url)
+		wsSesion.Session.SendCommand(wsSesion.Session.CheckCommand)
+		time.Sleep(10 * time.Second)
+	}
 }
 
 type JumpserverConfig struct {
@@ -82,7 +91,7 @@ type JumpserverConfig struct {
 	Port     int
 }
 
-func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection) (*ssh.Client, error) {
+func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection,wsSesion session.WsSesion) (*ssh.Client, error) {
 	var config ssh.ClientConfig
 	var authMethods []ssh.AuthMethod
 	authMethods = append(authMethods, ssh.Password(conf.Password))
@@ -100,7 +109,7 @@ func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection) (*ssh.C
 				if err != nil {
 					return nil, err
 				}*/
-				MFA := <-IN
+				MFA := <- wsSesion.IN
 				fmt.Println("MFA:", MFA)
 				answers = append(answers, MFA)
 			} else {
@@ -131,91 +140,38 @@ func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection) (*ssh.C
 	return client, nil
 }
 
-func NewSession(client *ssh.Client) *JumpserverSession {
-	session, err := client.NewSession()
+func NewSession(client *ssh.Client,wsSesion session.WsSesion) *session.JumpserverSession {
+	sshSession, err := client.NewSession()
 	CheckErr(err, "create new session")
-	in := &Input{make(chan string)}
-	session.Stdin = in
-	out := &Output{make(chan string)}
-	session.Stdout = out
-	session.Stderr = os.Stderr
-	session.Setenv("LANG", "zh_CN.UTF-8")
+	in := &session.Input{make(chan string)}
+	sshSession.Stdin = in
+	out := &session.Output{make(chan string),wsSesion.Session}
+	sshSession.Stdout = out
+	sshSession.Stderr = os.Stderr
+	sshSession.Setenv("LANG", "zh_CN.UTF-8")
 	modes := ssh.TerminalModes{
 		ssh.ECHO:          0,
 		ssh.TTY_OP_ISPEED: 14400,
 		ssh.TTY_OP_OSPEED: 14400,
 	}
-	err = session.RequestPty("xterm", 100, 200, modes)
+	err = sshSession.RequestPty("xterm", 100, 200, modes)
 	if err != nil {
 		log.Println(errors.New("unable request pty  " + err.Error()))
 	}
-
+	jumpserverSession := &session.JumpserverSession{sshSession, in, out,true,"",wsSesion,0,""}
 	go func(s *ssh.Session) {
 		err = s.Shell()
 		CheckErr(err, "session shell")
 		err = s.Wait()
 		CheckErr(err, "session wait")
 		log.Println("session over")
-		OUT <- "close channel session"
-	}(session)
-	return &JumpserverSession{session, in, out}
+		wsSesion.OUT <- "close channel session"
+	}(sshSession)
+	return jumpserverSession
 }
 
-type JumpserverSession struct {
-	*ssh.Session
-	In  *Input
-	out *Output
-}
 
-func (s *JumpserverSession) SendCommand(command string) {
-	s.In.in <- command
-	log.Println("send command:", command)
-}
 
-type Input struct {
-	in chan string
-}
-
-func (in *Input) Read(p []byte) (n int, err error) {
-	log.Println("wait read...")
-	str := <-in.in
-	if strings.Index(str, "\n") <= 0 {
-		str = str + "\n"
-	}
-	log.Println("receive command:", str)
-	if str == io.EOF.Error() {
-		return 0, io.EOF
-	}
-	if str == "" {
-		return 0, nil
-	}
-	bytes := []byte(str)
-	for i, b := range bytes {
-		p[i] = b
-	}
-	return len(bytes), nil
-}
-
-type Output struct {
-	out chan string
-}
-
-func (out *Output) Write(p []byte) (n int, err error) {
-	if len(p) == 0 {
-		log.Println("session close")
-		return -1, io.EOF
-	}
-	output := string(p)
-	if strings.Contains(output, "Opt>") {
-		loginServer = false
-	}
-	if loginServer == false && (strings.Contains(output, "$") || strings.Contains(output, "#")) {
-		loginServer = true
-	}
-	OUT <- output
-	//log.Println("output:", output)
-	return len(p), nil
-}
 
 /*func (session *SSHSession) Close() {
 	close(session.In.Input)

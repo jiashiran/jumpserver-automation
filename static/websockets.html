@@ -9,11 +9,12 @@
     <button onclick="mfalogin()">输入MFA</button>
     &nbsp
     <button onclick="execute()">执行</button>
+    <button onclick="stopExecute()">停止</button>
     任务名：<input id="taskName" type="text" /><button onclick="save()">新建任务</button>
     <br/>
     <textarea id="task" style="overflow:auto; height: 100px; width: 100%; border: 1px solid #999;"></textarea>
 </div>
-
+<input type="hidden" id="sessionId"/>
 <hr/>
 <hr/>
 <!-- the messages will be shown here -->
@@ -49,6 +50,11 @@
 
 
     function addMessage(msg) {
+        if(msg.indexOf("WebSocketId:") != -1){
+            msg = msg.replace("WebSocketId:","");
+            document.getElementById("sessionId").value = msg;
+            return
+        }
         output.innerHTML += msg + "\n";
         add()
         if(msg.indexOf("[MFA auth]:") != -1){
@@ -169,6 +175,19 @@
         var id = obj.options[index].text; // 选中文本
         var xhr = new XMLHttpRequest();
         xhr.open('GET', '/task/execute?id=' + id);
+        xhr.send();
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    alert(xhr.responseText);
+                }
+            }
+        }
+    }
+    
+    function stopExecute() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/task/stopExecute?id='+ document.getElementById("sessionId").value);
         xhr.send();
         xhr.onreadystatechange = function () {
             if (xhr.readyState == 4) {

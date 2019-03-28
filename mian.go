@@ -1,13 +1,13 @@
 package main
 
 import (
-	"jumpserver-automation/websocket"
+	"jumpserver-automation/ws"
 )
 
 
 func main() {
 
-	websocket.Service()
+	ws.Service()
 
 	//WaitStop()
 }

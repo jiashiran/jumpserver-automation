@@ -1,4 +1,4 @@
-package websocket
+package ws
 
 import (
 	"encoding/json"
@@ -7,8 +7,8 @@ import (
 	"github.com/kataras/iris/context"
 	"github.com/kataras/iris/middleware/recover"
 	"github.com/kataras/iris/websocket"
-	"golang.org/x/crypto/ssh"
 	"io/ioutil"
+	"jumpserver-automation/session"
 	"jumpserver-automation/store"
 	"jumpserver-automation/util"
 	"log"
@@ -18,11 +18,6 @@ import (
 
 var cons sync.Map
 
-type WsSesion struct {
-	ID      string
-	Client  *ssh.Client
-	Session *util.JumpserverSession
-}
 
 func Service() {
 	app := iris.New()
@@ -52,7 +47,8 @@ func Service() {
 		id = strings.Split(id, "=")[1]
 		log.Println("execute task :", id)
 		m := store.Select(id)
-		util.Execute(m)
+		_ = m
+		//util.Execute(m)
 		context.Write([]byte("ok"))
 	})
 
@@ -80,6 +76,21 @@ func Service() {
 		log.Println("delete task", id)
 		store.Delete(id)
 		context.Write([]byte(id + " deleted ok"))
+	})
+
+	app.Get("/task/stopExecute", func(context context.Context) {
+		uri := context.Request().RequestURI
+		id := strings.Split(uri, "?")[1]
+		id = strings.Split(id, "=")[1]
+		log.Println("stopExecute sessionId", id)
+		wsSesion, ok := cons.Load(id)
+		if ok {
+			ws := wsSesion.(session.WsSesion)
+			ws.Session.Close()
+			context.Write([]byte("stopExecute sessionId:" + id))
+		}else {
+			context.Write([]byte("no stopExecute sessionId:" + id))
+		}
 	})
 
 	setupWebsocket(app)
@@ -116,26 +127,33 @@ func handleConnection(c websocket.Connection) {
 	c.On("chat", func(msg string) {
 		// Print the message to the console, c.Context() is the iris's http context.
 		fmt.Printf("%s sent: %s\n", c.Context().RemoteAddr(), msg)
+		var ws session.WsSesion
 		wsSesion, ok := cons.Load(c.ID())
 		if !ok {
-			wsSesion = WsSesion{ID: c.ID()}
+			wsSesion = session.WsSesion{ID: c.ID(),OUT:make(chan string, 100),IN:make(chan string),LoginServer:false}
 			cons.Store(c.ID(), wsSesion)
+			ws = session.WsSesion{}
 			log.Println("create new session:", c.ID())
 		} else {
-			ws := wsSesion.(WsSesion)
+			ws = wsSesion.(session.WsSesion)
 			log.Println(ws.ID, msg)
 		}
 
 		if strings.Contains(msg, "jump") {
 			ms := strings.Split(msg, "|")
 			go func() {
-				util.Jump(ms[1], ms[2], "", 0, c)
+				client,jumpserverSession:=util.Jump(ms[1], ms[2], "", 0, c,ws)
+				ws := wsSesion.(session.WsSesion)
+				ws.Client = client
+				ws.Session = jumpserverSession
+				jumpserverSession.WebSesion = ws
+				c.Emit("chat", "WebSocketId:"+c.ID())
 			}()
 			go func() {
 
 				for {
 					select {
-					case msg := <-util.OUT:
+					case msg := <- ws.OUT:
 						{
 							c.Emit("chat", msg)
 							if msg == "close channel session" {
@@ -150,7 +168,7 @@ func handleConnection(c websocket.Connection) {
 				log.Println("close channel session")
 			}()
 		} else if strings.Contains(msg, "[MFA auth]: ") {
-			util.IN <- strings.Replace(msg, "[MFA auth]: ", "", -1)
+			ws.IN <- strings.Replace(msg, "[MFA auth]: ", "", -1)
 		}
 		// Write message back to the client message owner with:
 
@@ -161,7 +179,7 @@ func handleConnection(c websocket.Connection) {
 	c.OnDisconnect(func() {
 		wsSesion, ok := cons.Load(c.ID())
 		if ok {
-			ws := wsSesion.(WsSesion)
+			ws := wsSesion.(session.WsSesion)
 			ws.Session.Close()
 			ws.Client.Close()
 		}
