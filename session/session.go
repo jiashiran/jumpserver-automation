@@ -22,7 +22,7 @@ type JumpserverSession struct {
 	Out *Output
 	Health bool
 	CheckURL string
-	WebSesion WsSesion
+	WebSesion *WsSesion
 	CheckCount	int
 	CheckCommand string
 }
@@ -67,6 +67,9 @@ func (out *Output) Write(p []byte) (n int, err error) {
 		return -1, io.EOF
 	}
 	output := string(p)
+	log.Println(out)
+	log.Println(out.JumpserverSession)
+	log.Println(out.JumpserverSession.WebSesion)
 	if strings.Contains(output, "Opt>") {
 		out.JumpserverSession.WebSesion.LoginServer = false
 	}

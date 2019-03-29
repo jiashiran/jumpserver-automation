@@ -24,7 +24,7 @@ var (
 	//jumpserverSession *JumpserverSession
 )
 
-func Jump(user string, password string, ip string, port int, c websocket.Connection,wsSesion session.WsSesion) (*ssh.Client,*session.JumpserverSession) {
+func Jump(user string, password string, ip string, port int, c websocket.Connection,wsSesion *session.WsSesion) (*ssh.Client,*session.JumpserverSession) {
 	client, err := NewJumpserverClient(&JumpserverConfig{
 		User:     user,
 		Password: password,
@@ -91,7 +91,7 @@ type JumpserverConfig struct {
 	Port     int
 }
 
-func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection,wsSesion session.WsSesion) (*ssh.Client, error) {
+func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection,wsSesion *session.WsSesion) (*ssh.Client, error) {
 	var config ssh.ClientConfig
 	var authMethods []ssh.AuthMethod
 	authMethods = append(authMethods, ssh.Password(conf.Password))
@@ -140,12 +140,12 @@ func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection,wsSesion
 	return client, nil
 }
 
-func NewSession(client *ssh.Client,wsSesion session.WsSesion) *session.JumpserverSession {
+func NewSession(client *ssh.Client,wsSesion *session.WsSesion) *session.JumpserverSession {
 	sshSession, err := client.NewSession()
 	CheckErr(err, "create new session")
 	in := &session.Input{make(chan string)}
 	sshSession.Stdin = in
-	out := &session.Output{make(chan string),wsSesion.Session}
+	out := &session.Output{wsSesion.OUT,wsSesion.Session}//todo
 	sshSession.Stdout = out
 	sshSession.Stderr = os.Stderr
 	sshSession.Setenv("LANG", "zh_CN.UTF-8")
@@ -159,6 +159,7 @@ func NewSession(client *ssh.Client,wsSesion session.WsSesion) *session.Jumpserve
 		log.Println(errors.New("unable request pty  " + err.Error()))
 	}
 	jumpserverSession := &session.JumpserverSession{sshSession, in, out,true,"",wsSesion,0,""}
+	out.JumpserverSession = jumpserverSession
 	go func(s *ssh.Session) {
 		err = s.Shell()
 		CheckErr(err, "session shell")

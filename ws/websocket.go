@@ -126,24 +126,24 @@ func handleConnection(c websocket.Connection) {
 	// Read events from browser
 	c.On("chat", func(msg string) {
 		// Print the message to the console, c.Context() is the iris's http context.
-		fmt.Printf("%s sent: %s\n", c.Context().RemoteAddr(), msg)
-		var ws session.WsSesion
+		fmt.Printf("%s resive sent: %s\n", c.Context().RemoteAddr(), msg)
+		var ws *session.WsSesion
 		wsSesion, ok := cons.Load(c.ID())
 		if !ok {
-			wsSesion = session.WsSesion{ID: c.ID(),OUT:make(chan string, 100),IN:make(chan string),LoginServer:false}
+			wsSesion = &session.WsSesion{ID: c.ID(),OUT:make(chan string, 100),IN:make(chan string),LoginServer:false}
 			cons.Store(c.ID(), wsSesion)
-			ws = session.WsSesion{}
+			ws = wsSesion.(*session.WsSesion)
 			log.Println("create new session:", c.ID())
 		} else {
-			ws = wsSesion.(session.WsSesion)
+			ws = wsSesion.(*session.WsSesion)
 			log.Println(ws.ID, msg)
 		}
 
 		if strings.Contains(msg, "jump") {
 			ms := strings.Split(msg, "|")
 			go func() {
-				client,jumpserverSession:=util.Jump(ms[1], ms[2], "", 0, c,ws)
-				ws := wsSesion.(session.WsSesion)
+				client,jumpserverSession:=util.Jump(ms[1], ms[2], "", 62012, c,ws)
+				ws := wsSesion.(*session.WsSesion)
 				ws.Client = client
 				ws.Session = jumpserverSession
 				jumpserverSession.WebSesion = ws
