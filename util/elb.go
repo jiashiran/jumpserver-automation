@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/elb"
 	"github.com/aws/aws-sdk-go/service/elbv2"
 	"log"
 	"strconv"
@@ -15,6 +16,7 @@ import (
 
 var (
 	awsElbClient *elbv2.ELBV2
+	awsLbClient  *elb.ELB
 	aliyunClient *slb.Client
 	AWS_TYPE     = "aws"
 	ALIYUN_TYPE  = "aliyun"
@@ -39,6 +41,7 @@ type YunConfig struct {
 	AliyunAecretAccessKey string
 }
 
+//LB aws alb in InstanceId LoadBalancerId port
 func OperatLb(operate string) (bool, string) {
 	result := false
 	operates := strings.Split(operate, " ")
@@ -80,6 +83,7 @@ func buildClient(yun string, yunconfig YunConfig) {
 		}
 		config.WithCredentialsChainVerboseErrors(true)
 		awsElbClient = elbv2.New(sess, config)
+		awsLbClient = elb.New(sess, aws.NewConfig().WithRegion(yunConfig.AwsRegion))
 	} else if strings.Contains(yun, ALIYUN_TYPE) {
 		var err error
 		// 创建slbClient实例
@@ -95,52 +99,84 @@ func buildClient(yun string, yunconfig YunConfig) {
 	}
 }
 
-func AddBackendServer(LoadBalancerId string, InstanceId string, port int64, lbType string, yun string, yunconfig YunConfig) bool {
+func AddBackendServer(LoadBalancerIdOrName string, InstanceId string, port int64, lbType string, yun string, yunconfig YunConfig) bool {
 	if strings.Contains(yun, AWS_TYPE) {
 		buildClient(yun, yunconfig)
-
-		input := &elbv2.RegisterTargetsInput{
-			//arn:aws-cn:elasticloadbalancing:cn-northwest-1:099573169643:targetgroup/sip-router-api-test/9a32752f9696cae4
-			TargetGroupArn: aws.String(LoadBalancerId),
-			Targets: []*elbv2.TargetDescription{
-				{
-					Id:   aws.String(InstanceId),
-					Port: aws.Int64(port),
+		if lbType == "alb" {
+			input := &elbv2.RegisterTargetsInput{
+				//arn:aws-cn:elasticloadbalancing:cn-northwest-1:099573169643:targetgroup/sip-router-api-test/9a32752f9696cae4
+				TargetGroupArn: aws.String(LoadBalancerIdOrName), //LoadBalancerId
+				Targets: []*elbv2.TargetDescription{
+					{
+						Id:   aws.String(InstanceId),
+						Port: aws.Int64(port),
+					},
 				},
-			},
-		}
-
-		result, err := awsElbClient.RegisterTargets(input)
-		if err != nil {
-			if aerr, ok := err.(awserr.Error); ok {
-				switch aerr.Code() {
-				case elbv2.ErrCodeTargetGroupNotFoundException:
-					fmt.Println(elbv2.ErrCodeTargetGroupNotFoundException, aerr.Error())
-				case elbv2.ErrCodeTooManyTargetsException:
-					fmt.Println(elbv2.ErrCodeTooManyTargetsException, aerr.Error())
-				case elbv2.ErrCodeInvalidTargetException:
-					fmt.Println(elbv2.ErrCodeInvalidTargetException, aerr.Error())
-				case elbv2.ErrCodeTooManyRegistrationsForTargetIdException:
-					fmt.Println(elbv2.ErrCodeTooManyRegistrationsForTargetIdException, aerr.Error())
-				default:
-					fmt.Println(aerr.Error())
-				}
-			} else {
-				// Print the error, cast err to awserr.Error to get the Code and
-				// Message from an error.
-				fmt.Println(err.Error())
 			}
-			return false
-		}
 
-		fmt.Println(result)
-		return true
+			result, err := awsElbClient.RegisterTargets(input)
+			if err != nil {
+				if aerr, ok := err.(awserr.Error); ok {
+					switch aerr.Code() {
+					case elbv2.ErrCodeTargetGroupNotFoundException:
+						fmt.Println(elbv2.ErrCodeTargetGroupNotFoundException, aerr.Error())
+					case elbv2.ErrCodeTooManyTargetsException:
+						fmt.Println(elbv2.ErrCodeTooManyTargetsException, aerr.Error())
+					case elbv2.ErrCodeInvalidTargetException:
+						fmt.Println(elbv2.ErrCodeInvalidTargetException, aerr.Error())
+					case elbv2.ErrCodeTooManyRegistrationsForTargetIdException:
+						fmt.Println(elbv2.ErrCodeTooManyRegistrationsForTargetIdException, aerr.Error())
+					default:
+						fmt.Println(aerr.Error())
+					}
+				} else {
+					// Print the error, cast err to awserr.Error to get the Code and
+					// Message from an error.
+					fmt.Println(err.Error())
+				}
+				return false
+			}
+
+			fmt.Println(result)
+			return true
+		} else if lbType == "elb" {
+			input := &elb.RegisterInstancesWithLoadBalancerInput{
+				Instances: []*elb.Instance{
+					{
+						InstanceId: aws.String(InstanceId),
+					},
+				},
+				LoadBalancerName: aws.String(LoadBalancerIdOrName), //LoadBalancerName
+			}
+
+			result, err := awsLbClient.RegisterInstancesWithLoadBalancer(input)
+			if err != nil {
+				if aerr, ok := err.(awserr.Error); ok {
+					switch aerr.Code() {
+					case elb.ErrCodeAccessPointNotFoundException:
+						fmt.Println(elb.ErrCodeAccessPointNotFoundException, aerr.Error())
+					case elb.ErrCodeInvalidEndPointException:
+						fmt.Println(elb.ErrCodeInvalidEndPointException, aerr.Error())
+					default:
+						fmt.Println(aerr.Error())
+					}
+				} else {
+					// Print the error, cast err to awserr.Error to get the Code and
+					// Message from an error.
+					fmt.Println(err.Error())
+				}
+				return false
+			}
+
+			fmt.Println(result)
+			return true
+		}
 
 	} else if strings.Contains(yun, ALIYUN_TYPE) {
 		buildClient(yun, yunconfig)
 		request := slb.CreateAddBackendServersRequest()
 		request.BackendServers = fmt.Sprintf("[{\"ServerId\":\"%s\",\"Weight\":\"100\"}]", InstanceId)
-		request.LoadBalancerId = LoadBalancerId
+		request.LoadBalancerId = LoadBalancerIdOrName
 		request.Port = fmt.Sprint(port)
 		response, err := aliyunClient.AddBackendServers(request)
 		if err != nil {
@@ -155,8 +191,8 @@ func AddBackendServer(LoadBalancerId string, InstanceId string, port int64, lbTy
 	return false
 }
 
-func RemoveBackendServer(LoadBalancerId string, InstanceId string, port int64, lbType string, yun string, yunconfig YunConfig) bool {
-	count := DescribeTargetGroups(LoadBalancerId, lbType, yun, yunconfig)
+func RemoveBackendServer(LoadBalancerIdOrName string, InstanceId string, port int64, lbType string, yun string, yunconfig YunConfig) bool {
+	count := DescribeTargetGroups(LoadBalancerIdOrName, lbType, yun, yunconfig)
 	fmt.Println(count)
 	if count <= 1 {
 		log.Println("Instance count:", count, ",remove fail")
@@ -164,42 +200,75 @@ func RemoveBackendServer(LoadBalancerId string, InstanceId string, port int64, l
 	}
 	if strings.Contains(yun, AWS_TYPE) {
 		buildClient(yun, yunconfig)
-		input := &elbv2.DeregisterTargetsInput{
-			TargetGroupArn: aws.String(LoadBalancerId),
-			Targets: []*elbv2.TargetDescription{
-				{
-					Id:   aws.String(InstanceId),
-					Port: aws.Int64(port),
+		if lbType == "alb" {
+			input := &elbv2.DeregisterTargetsInput{
+				TargetGroupArn: aws.String(LoadBalancerIdOrName),
+				Targets: []*elbv2.TargetDescription{
+					{
+						Id:   aws.String(InstanceId),
+						Port: aws.Int64(port),
+					},
 				},
-			},
-		}
-
-		result, err := awsElbClient.DeregisterTargets(input)
-		if err != nil {
-			if aerr, ok := err.(awserr.Error); ok {
-				switch aerr.Code() {
-				case elbv2.ErrCodeTargetGroupNotFoundException:
-					fmt.Println(elbv2.ErrCodeTargetGroupNotFoundException, aerr.Error())
-				case elbv2.ErrCodeInvalidTargetException:
-					fmt.Println(elbv2.ErrCodeInvalidTargetException, aerr.Error())
-				default:
-					fmt.Println(aerr.Error())
-				}
-			} else {
-				// Print the error, cast err to awserr.Error to get the Code and
-				// Message from an error.
-				fmt.Println(err.Error())
 			}
-			return false
+
+			result, err := awsElbClient.DeregisterTargets(input)
+			if err != nil {
+				if aerr, ok := err.(awserr.Error); ok {
+					switch aerr.Code() {
+					case elbv2.ErrCodeTargetGroupNotFoundException:
+						fmt.Println(elbv2.ErrCodeTargetGroupNotFoundException, aerr.Error())
+					case elbv2.ErrCodeInvalidTargetException:
+						fmt.Println(elbv2.ErrCodeInvalidTargetException, aerr.Error())
+					default:
+						fmt.Println(aerr.Error())
+					}
+				} else {
+					// Print the error, cast err to awserr.Error to get the Code and
+					// Message from an error.
+					fmt.Println(err.Error())
+				}
+				return false
+			}
+
+			fmt.Println(result)
+			return true
+		} else if lbType == "elb" {
+			input := &elb.DeregisterInstancesFromLoadBalancerInput{
+				Instances: []*elb.Instance{
+					{
+						InstanceId: aws.String(InstanceId),
+					},
+				},
+				LoadBalancerName: aws.String(LoadBalancerIdOrName),
+			}
+
+			result, err := awsLbClient.DeregisterInstancesFromLoadBalancer(input)
+			if err != nil {
+				if aerr, ok := err.(awserr.Error); ok {
+					switch aerr.Code() {
+					case elb.ErrCodeAccessPointNotFoundException:
+						fmt.Println(elb.ErrCodeAccessPointNotFoundException, aerr.Error())
+					case elb.ErrCodeInvalidEndPointException:
+						fmt.Println(elb.ErrCodeInvalidEndPointException, aerr.Error())
+					default:
+						fmt.Println(aerr.Error())
+					}
+				} else {
+					// Print the error, cast err to awserr.Error to get the Code and
+					// Message from an error.
+					fmt.Println(err.Error())
+				}
+				return false
+			}
+
+			fmt.Println(result)
 		}
 
-		fmt.Println(result)
-		return true
 	} else if strings.Contains(yun, ALIYUN_TYPE) {
 		buildClient(yun, yunconfig)
 		request := slb.CreateRemoveBackendServersRequest()
 		request.BackendServers = fmt.Sprintf("[\"%s\"]", InstanceId)
-		request.LoadBalancerId = LoadBalancerId
+		request.LoadBalancerId = LoadBalancerIdOrName
 		request.Port = fmt.Sprint(port)
 		response, err := aliyunClient.RemoveBackendServers(request)
 		if err != nil {
@@ -215,46 +284,79 @@ func RemoveBackendServer(LoadBalancerId string, InstanceId string, port int64, l
 	return false
 }
 
-func DescribeTargetGroups(LoadBalancerId string, lbType string, yun string, yunconfig YunConfig) int {
+func DescribeTargetGroups(LoadBalancerIdOrName string, lbType string, yun string, yunconfig YunConfig) int {
 	count := 0
 	if strings.Contains(yun, AWS_TYPE) {
 		buildClient(yun, yunconfig)
-		input := &elbv2.DescribeTargetHealthInput{
-			TargetGroupArn: aws.String(LoadBalancerId),
-		}
+		if lbType == "alb" {
+			input := &elbv2.DescribeTargetHealthInput{
+				TargetGroupArn: aws.String(LoadBalancerIdOrName),
+			}
 
-		result, err := awsElbClient.DescribeTargetHealth(input)
-		if err != nil {
-			if aerr, ok := err.(awserr.Error); ok {
-				switch aerr.Code() {
-				case elbv2.ErrCodeInvalidTargetException:
-					fmt.Println(elbv2.ErrCodeInvalidTargetException, aerr.Error())
-				case elbv2.ErrCodeTargetGroupNotFoundException:
-					fmt.Println(elbv2.ErrCodeTargetGroupNotFoundException, aerr.Error())
-				case elbv2.ErrCodeHealthUnavailableException:
-					fmt.Println(elbv2.ErrCodeHealthUnavailableException, aerr.Error())
-				default:
-					fmt.Println(aerr.Error())
+			result, err := awsElbClient.DescribeTargetHealth(input)
+			if err != nil {
+				if aerr, ok := err.(awserr.Error); ok {
+					switch aerr.Code() {
+					case elbv2.ErrCodeInvalidTargetException:
+						fmt.Println(elbv2.ErrCodeInvalidTargetException, aerr.Error())
+					case elbv2.ErrCodeTargetGroupNotFoundException:
+						fmt.Println(elbv2.ErrCodeTargetGroupNotFoundException, aerr.Error())
+					case elbv2.ErrCodeHealthUnavailableException:
+						fmt.Println(elbv2.ErrCodeHealthUnavailableException, aerr.Error())
+					default:
+						fmt.Println(aerr.Error())
+					}
+				} else {
+					// Print the error, cast err to awserr.Error to get the Code and
+					// Message from an error.
+					fmt.Println(err.Error())
 				}
-			} else {
-				// Print the error, cast err to awserr.Error to get the Code and
-				// Message from an error.
-				fmt.Println(err.Error())
+				return -1
 			}
-			return -1
-		}
 
-		for _, target := range result.TargetHealthDescriptions {
-			if aws.StringValue(target.TargetHealth.State) == "healthy" {
-				count++
+			for _, target := range result.TargetHealthDescriptions {
+				if aws.StringValue(target.TargetHealth.State) == elbv2.TargetHealthStateEnumHealthy {
+					count++
+				}
 			}
+			fmt.Println(result)
+		} else if lbType == "elb" {
+			input := &elb.DescribeInstanceHealthInput{
+				LoadBalancerName: aws.String(LoadBalancerIdOrName),
+			}
+
+			result, err := awsLbClient.DescribeInstanceHealth(input)
+			if err != nil {
+				if aerr, ok := err.(awserr.Error); ok {
+					switch aerr.Code() {
+					case elb.ErrCodeAccessPointNotFoundException:
+						fmt.Println(elb.ErrCodeAccessPointNotFoundException, aerr.Error())
+					case elb.ErrCodeInvalidEndPointException:
+						fmt.Println(elb.ErrCodeInvalidEndPointException, aerr.Error())
+					default:
+						fmt.Println(aerr.Error())
+					}
+				} else {
+					// Print the error, cast err to awserr.Error to get the Code and
+					// Message from an error.
+					fmt.Println(err.Error())
+				}
+				return -1
+			}
+
+			for _, target := range result.InstanceStates {
+				if aws.StringValue(target.State) == "InService" {
+					count++
+				}
+			}
+
+			fmt.Println(result)
 		}
-		fmt.Println(result)
 
 	} else if strings.Contains(yun, ALIYUN_TYPE) {
 		buildClient(yun, yunconfig)
 		request := slb.CreateDescribeHealthStatusRequest()
-		request.LoadBalancerId = LoadBalancerId
+		request.LoadBalancerId = LoadBalancerIdOrName
 		response, err := aliyunClient.DescribeHealthStatus(request)
 		if err != nil {
 			// 异常处理

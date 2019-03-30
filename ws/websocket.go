@@ -161,7 +161,8 @@ func handleConnection(c websocket.Connection) {
 		var ws *session.WsSesion
 		wsSesion, ok := cons.Load(c.ID())
 		if !ok {
-			wsSesion = &session.WsSesion{ID: c.ID(), OUT: make(chan string, 100), IN: make(chan string), LoginServer: false}
+			var loginServer uint32 = 1
+			wsSesion = &session.WsSesion{ID: c.ID(), OUT: make(chan string, 500), IN: make(chan string), LoginServer: &loginServer}
 			cons.Store(c.ID(), wsSesion)
 			ws = wsSesion.(*session.WsSesion)
 			log.Println("create new session:", c.ID())

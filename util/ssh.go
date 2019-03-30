@@ -15,6 +15,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -53,9 +54,10 @@ func Execute(wsSesion *session.WsSesion, task string) {
 
 		} else if ms[0] == "LOGOUT" {
 
-			for wsSesion.LoginServer == true {
-				log.Println("loginServer:", wsSesion.LoginServer)
+			for atomic.LoadUint32(wsSesion.LoginServer) > 0 {
+				log.Println("loginServer:", wsSesion.LoginServer, wsSesion.ID)
 				wsSesion.Session.SendCommand("exit")
+				time.Sleep(3 * time.Second)
 			}
 
 		} else if ms[0] == "SHELL" {
@@ -82,11 +84,12 @@ func Execute(wsSesion *session.WsSesion, task string) {
 }
 
 func check(wsSesion *session.WsSesion, url string) {
-	command := "curl_check=`curl -I -m 10 -o /dev/null -s -w %{http_code} " + url + "`"
-	wsSesion.Session.SendCommand(command)
+	//command := "curl_check=`curl -I -m 10 -o /dev/null -s -w %{http_code} " + url + "`"
+	//wsSesion.Session.SendCommand(command)
 	wsSesion.Session.CheckURL = url + " is 200ok"
 	wsSesion.Session.CheckCommand = "echo `if [ $curl_check == 200 ]; then echo \"" + wsSesion.Session.CheckURL + "\"; fi`"
-	for wsSesion.Session.Health = false; !wsSesion.Session.Health; {
+	atomic.StoreInt32(wsSesion.Session.CheckCount, 0)
+	for atomic.StoreUint32(wsSesion.Session.Health, 0); atomic.LoadUint32(wsSesion.Session.Health) == 0; {
 		log.Println("check url:", url)
 		wsSesion.Session.SendCommand("curl -I -m 10 -s " + url)
 		wsSesion.Session.SendCommand(wsSesion.Session.CheckCommand)
@@ -173,7 +176,9 @@ func NewSession(client *ssh.Client, wsSesion *session.WsSesion) *session.Jumpser
 	if err != nil {
 		log.Println(errors.New("unable request pty  " + err.Error()))
 	}
-	jumpserverSession := &session.JumpserverSession{sshSession, in, out, true, "", wsSesion, 0, ""}
+	var checkCount int32 = 0
+	var health uint32 = 0
+	jumpserverSession := &session.JumpserverSession{sshSession, in, out, &health, "", wsSesion, &checkCount, ""}
 	out.JumpserverSession = jumpserverSession
 	go func(s *ssh.Session) {
 		err = s.Shell()

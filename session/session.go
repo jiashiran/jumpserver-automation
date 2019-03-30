@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"strings"
+	"sync/atomic"
 )
 
 type WsSesion struct {
@@ -14,18 +15,19 @@ type WsSesion struct {
 	Session     *JumpserverSession
 	OUT         chan string //           = make(chan string, 100)
 	IN          chan string //           = make(chan string)
-	LoginServer bool
-	C           websocket.Connection
+	LoginServer *uint32
+
+	C websocket.Connection
 }
 
 type JumpserverSession struct {
 	*ssh.Session
 	In           *Input
 	Out          *Output
-	Health       bool
+	Health       *uint32
 	CheckURL     string
 	WebSesion    *WsSesion
-	CheckCount   int
+	CheckCount   *int32
 	CheckCommand string
 }
 
@@ -75,27 +77,28 @@ type Output struct {
 }
 
 func (out *Output) Write(p []byte) (n int, err error) {
-	defer func() {
+	/*defer func() {
 		if err := recover(); err != nil {
 			log.Println("Write error:", err)
 			close(out.Out)
 		}
-	}()
-	if len(p) == 0 {
+	}()*/
+	/*if len(p) == 0 {
 		log.Println("session close")
 		return -1, io.EOF
-	}
+	}*/
 	output := string(p)
 	if strings.Contains(output, "Opt>") {
-		out.JumpserverSession.WebSesion.LoginServer = false
+		atomic.StoreUint32(out.JumpserverSession.WebSesion.LoginServer, 0)
 	}
-	if out.JumpserverSession.WebSesion.LoginServer == false && (strings.Contains(output, "$") || strings.Contains(output, "#")) {
-		out.JumpserverSession.WebSesion.LoginServer = true
+	if atomic.LoadUint32(out.JumpserverSession.WebSesion.LoginServer) == 0 && (strings.Contains(output, "$") || strings.Contains(output, "#")) {
+		atomic.StoreUint32(out.JumpserverSession.WebSesion.LoginServer, 1)
 	}
 	if out.JumpserverSession.CheckURL != "" && strings.Contains(output, out.JumpserverSession.CheckURL) && !strings.Contains(output, out.JumpserverSession.CheckCommand) {
-		out.JumpserverSession.CheckCount += 1
-		if out.JumpserverSession.CheckCount >= 3 {
-			out.JumpserverSession.Health = true
+		atomic.AddInt32(out.JumpserverSession.CheckCount, 1)
+		log.Println("健康检查", atomic.LoadInt32(out.JumpserverSession.CheckCount))
+		if atomic.LoadInt32(out.JumpserverSession.CheckCount) >= 3 {
+			atomic.StoreUint32(out.JumpserverSession.Health, 1)
 		}
 	}
 	out.JumpserverSession.WebSesion.OUT <- output
