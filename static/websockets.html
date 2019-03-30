@@ -2,15 +2,19 @@
     <select id="all_task" onchange="getTask(this.options[this.options.selectedIndex].value)"><option>select</option></select>
     <button onclick="updateTask()">更新</button><button onclick="del()">删除</button>
     &nbsp
+    <span id="loginDiv">
     Jumpserver Username：<input id="user" type="text" />
     Password：<input id="password" type="password" />
-    <button onclick="login()">登录</button>
+    <button id="loginButton" onclick="login()">登录</button>
     <input id="mfa" type="text" />
-    <button onclick="mfalogin()">输入MFA</button>
+    <button id="mfaButton" onclick="mfalogin()">输入MFA</button>
+    </span>
     &nbsp
     <button onclick="execute()">执行</button>
     <button onclick="stopExecute()">停止</button>
+    <br/>
     任务名：<input id="taskName" type="text" /><button onclick="save()">新建任务</button>
+    <button onclick="clearOutput()">清空输出</button>&nbsp<label style="color: red" id="jumpServerStatus"></label>
     <br/>
     <textarea id="task" style="overflow:auto; height: 100px; width: 100%; border: 1px solid #999;"></textarea>
 </div>
@@ -37,6 +41,7 @@
     var socket = new Ws(wsURL)
     socket.OnConnect(function () {
         output.innerHTML += "Status: Connected\n";
+        //document.getElementById("wsbSocketStatus").innerText = "Status: Connected\n"
     });
 
     socket.OnDisconnect(function () {
@@ -53,6 +58,9 @@
         if(msg.indexOf("WebSocketId:") != -1){
             msg = msg.replace("WebSocketId:","");
             document.getElementById("sessionId").value = msg;
+            document.getElementById("loginButton").disabled = true;
+            document.getElementById("mfaButton").disabled = true;
+            document.getElementById("jumpServerStatus").innerText = "JumpServer已登陆";
             return
         }
         output.innerHTML += msg + "\n";
@@ -65,6 +73,10 @@
     function add() {
         var div = document.getElementById('scrolldIV');
         div.scrollTop = div.scrollHeight;
+    }
+
+    function clearOutput() {
+        output.innerHTML = ""
     }
 
     function login() {
@@ -84,7 +96,6 @@
 
     };
 
-    // 创建查询员工方法
     function loadTasks() {
         var xhr = new XMLHttpRequest();
         xhr.open('GET', '/tasks/list');
@@ -103,7 +114,7 @@
     }
     function getTask(id) {
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/task?id='+id);
+        xhr.open('GET', '/task?id='+id+"&sessionId="+document.getElementById("sessionId").value);
         xhr.send();
         xhr.onreadystatechange = function () {
             if (xhr.readyState == 4) {
@@ -121,7 +132,7 @@
         var index = obj.selectedIndex; // 选中索引
         var text = obj.options[index].text; // 选中文本
         var xhr = new XMLHttpRequest();
-        xhr.open('POST', '/task/update?id='+text);
+        xhr.open('POST', '/task/update?id='+text+"&sessionId="+document.getElementById("sessionId").value);
         xhr.setRequestHeader("Content-type","application/text");
         xhr.send(task);
         xhr.onreadystatechange = function () {
@@ -139,7 +150,7 @@
         var text = document.getElementById("taskName").value; // 选中文本
         console.log(text);
         var xhr = new XMLHttpRequest();
-        xhr.open('POST', '/task/update?id='+text);
+        xhr.open('POST', '/task/update?id='+text+"&sessionId="+document.getElementById("sessionId").value);
         xhr.setRequestHeader("Content-type","application/text");
         xhr.send(task);
         xhr.onreadystatechange = function () {
@@ -157,7 +168,7 @@
         var index = obj.selectedIndex; // 选中索引
         var id = obj.options[index].text; // 选中文本
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/task/delete?id='+id);
+        xhr.open('GET', '/task/delete?id='+id+"&sessionId="+document.getElementById("sessionId").value);
         xhr.send();
         xhr.onreadystatechange = function () {
             if (xhr.readyState == 4) {
@@ -174,7 +185,7 @@
         var index = obj.selectedIndex; // 选中索引
         var id = obj.options[index].text; // 选中文本
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/task/execute?id=' + id);
+        xhr.open('GET', '/task/execute?id=' + id+"&sessionId="+document.getElementById("sessionId").value);
         xhr.send();
         xhr.onreadystatechange = function () {
             if (xhr.readyState == 4) {
@@ -187,7 +198,7 @@
     
     function stopExecute() {
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/task/stopExecute?id='+ document.getElementById("sessionId").value);
+        xhr.open('GET', '/task/stopExecute?sessionId='+document.getElementById("sessionId").value);
         xhr.send();
         xhr.onreadystatechange = function () {
             if (xhr.readyState == 4) {

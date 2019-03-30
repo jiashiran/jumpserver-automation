@@ -1,98 +1,23 @@
-package util
+package shell
 
 import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/kataras/iris/websocket"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
 	"io"
-	"jumpserver-automation/session"
 	"log"
 	"net"
 	"os"
 	"strconv"
-	"strings"
+	"sync"
 	"syscall"
-	"time"
 )
 
-func Jump(user string, password string, ip string, port int, c websocket.Connection, wsSesion *session.WsSesion) (*ssh.Client, *session.JumpserverSession) {
-	client, err := NewJumpserverClient(&JumpserverConfig{
-		User:     user,
-		Password: password,
-		Ip:       ip,
-		Port:     port,
-	}, c, wsSesion)
-	if err != nil {
-		log.Println("gt client err:", err)
-		return nil, nil
-	}
-
-	jumpserverSession := NewSession(client, wsSesion)
-
-	return client, jumpserverSession
-}
-
-func Execute(wsSesion *session.WsSesion, task string) {
-	if wsSesion.Client != nil && wsSesion.Session == nil {
-		wsSesion.Session = NewSession(wsSesion.Client, wsSesion)
-	}
-
-	commands := strings.Split(task, "\n")
-
-	for i, m := range commands {
-
-		log.Println(i, m)
-		ms := strings.Split(m, " ")
-
-		if ms[0] == "LOGIN" {
-			wsSesion.Session.SendCommand(ms[1])
-
-		} else if ms[0] == "LOGOUT" {
-
-			for wsSesion.LoginServer == true {
-				log.Println("loginServer:", wsSesion.LoginServer)
-				wsSesion.Session.SendCommand("exit")
-			}
-
-		} else if ms[0] == "SHELL" {
-
-			log.Println("shell")
-			wsSesion.Session.SendCommand(strings.ReplaceAll(m, "SHELL", ""))
-
-		} else if ms[0] == "LB" {
-
-		} else if ms[0] == "CHECK" {
-
-			check(wsSesion, ms[1])
-
-		} else if ms[0] == "SLEEP" {
-
-			second, err := time.ParseDuration(ms[1])
-			if err != nil {
-				log.Println("parse int error :", err)
-			}
-			time.Sleep(second)
-
-		}
-	}
-}
-
-func check(wsSesion *session.WsSesion, url string) {
-	command := "curl_check=`curl -I -m 10 -o /dev/null -s -w %{http_code} " + url + "`"
-	wsSesion.Session.SendCommand(command)
-	wsSesion.Session.CheckURL = url + " is 200ok"
-	wsSesion.Session.CheckCommand = "echo `if [ $curl_check == 200 ]; then echo \"" + wsSesion.Session.CheckURL + "\"; fi`"
-	for wsSesion.Session.Health = false; !wsSesion.Session.Health; {
-		log.Println("check url:", url)
-		wsSesion.Session.SendCommand("curl -I -m 10 -s " + url)
-		wsSesion.Session.SendCommand(wsSesion.Session.CheckCommand)
-		time.Sleep(10 * time.Second)
-	}
-}
+var OUT = make(chan string, 100)
+var IN = make(chan string)
 
 type JumpserverConfig struct {
 	User     string
@@ -101,7 +26,7 @@ type JumpserverConfig struct {
 	Port     int
 }
 
-func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection, wsSesion *session.WsSesion) (*ssh.Client, error) {
+func NewJumpserverClient(conf *JumpserverConfig) (*ssh.Client, error) {
 	var config ssh.ClientConfig
 	var authMethods []ssh.AuthMethod
 	authMethods = append(authMethods, ssh.Password(conf.Password))
@@ -109,24 +34,22 @@ func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection, wsSesio
 		answers := make([]string, 0, len(questions))
 		for i, q := range questions {
 			fmt.Print(q)
-			c.Emit("chat", q)
 			if echos[i] {
-				/*scan := bufio.NewScanner(os.Stdin)
+				scan := bufio.NewScanner(os.Stdin)
 				if scan.Scan() {
 					answers = append(answers, scan.Text())
 				}
 				err := scan.Err()
 				if err != nil {
 					return nil, err
-				}*/
-				MFA := <-wsSesion.IN
-				fmt.Println("MFA:", MFA)
-				answers = append(answers, MFA)
+				}
+
 			} else {
 				b, err := terminal.ReadPassword(int(syscall.Stdin))
 				if err != nil {
 					return nil, err
 				}
+				fmt.Println()
 				answers = append(answers, string(b))
 			}
 		}
@@ -139,90 +62,58 @@ func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection, wsSesio
 			return nil
 		},
 	}
-	var err error = nil
-	defer func() {
-		if e := recover(); e != nil {
-			log.Println("ssh Dial error:", e)
-			err = errors.New(fmt.Sprint(e))
-		}
-	}()
+
 	client, err := ssh.Dial("tcp", conf.Ip+":"+strconv.Itoa(conf.Port), &config)
 	if err != nil {
-		log.Println("Failed to dial: " + err.Error())
+		panic("Failed to dial: " + err.Error())
 		return nil, err
 	}
 
-	return client, err
+	return client, nil
 }
 
-func NewSession(client *ssh.Client, wsSesion *session.WsSesion) *session.JumpserverSession {
-	sshSession, err := client.NewSession()
+func NewShell(client *ssh.Client) *ssh.Session {
+	session, err := client.NewSession()
 	CheckErr(err, "create new session")
-	in := &session.Input{make(chan string)}
-	sshSession.Stdin = in
-	out := &session.Output{wsSesion.OUT, wsSesion.Session} //todo
-	sshSession.Stdout = out
-	sshSession.Stderr = os.Stderr
-	sshSession.Setenv("LANG", "zh_CN.UTF-8")
+	session.Stdin = os.Stdin
+	session.Stdout = os.Stdout
+	session.Stderr = os.Stderr
+	session.Setenv("LANG", "zh_CN.UTF-8")
 	modes := ssh.TerminalModes{
 		ssh.ECHO:          0,
 		ssh.TTY_OP_ISPEED: 14400,
 		ssh.TTY_OP_OSPEED: 14400,
 	}
-	err = sshSession.RequestPty("xterm", 100, 200, modes)
+	err = session.RequestPty("xterm", 100, 200, modes)
 	if err != nil {
 		log.Println(errors.New("unable request pty  " + err.Error()))
 	}
-	jumpserverSession := &session.JumpserverSession{sshSession, in, out, true, "", wsSesion, 0, ""}
-	out.JumpserverSession = jumpserverSession
+
 	go func(s *ssh.Session) {
 		err = s.Shell()
 		CheckErr(err, "session shell")
 		err = s.Wait()
 		CheckErr(err, "session wait")
 		log.Println("session over")
-		wsSesion.OUT <- "close channel session"
-	}(sshSession)
-	go func() {
-		for {
-			select {
-			case msg := <-wsSesion.OUT:
-				{
-					wsSesion.C.Emit("chat", msg)
-					if msg == "close channel session" {
-						goto CLOSE
-					}
-					break
-				}
-
-			}
-		}
-	CLOSE:
-		log.Println("close channel session")
-	}()
-
-	return jumpserverSession
+	}(session)
+	return session
 }
 
-/*func (session *SSHSession) Close() {
-	close(session.In.Input)
-	for {
-		select {
-		case <-session.out.out:
-		case <-time.After(10 * time.Second):
-			{
-
-				close(session.out.out)
-				session.Close()
-			}
-
-		}
-
+func Shell() {
+	client, err := NewJumpserverClient(&JumpserverConfig{
+		User:     "jiasr",
+		Password: "81451529Jsr!",
+		Ip:       "119.40.32.58",
+		Port:     62012,
+	})
+	if err != nil {
+		log.Fatal("gt client err:", err)
 	}
-	close(session.out.out)
-
-	session.Close()
-}*/
+	NewShell(client)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	wg.Wait()
+}
 
 func GetSftp(client *ssh.Client) *sftp.Client {
 	sftp, err := sftp.NewClient(client)

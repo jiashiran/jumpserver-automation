@@ -4,14 +4,12 @@ import (
 	"jumpserver-automation/ws"
 )
 
-
 func main() {
 
 	ws.Service()
 
 	//WaitStop()
 }
-
 
 /*func WaitStop()  {
 	// Go signal notification works by sending `os.Signal`
