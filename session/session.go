@@ -57,7 +57,7 @@ func (in *Input) Read(p []byte) (n int, err error) {
 	if strings.Index(str, "\n") <= 0 {
 		str = str + "\n"
 	}
-	log.Println("receive command:", str)
+	//log.Println("receive command:", str)
 	if str == io.EOF.Error() {
 		return 0, io.EOF
 	}
@@ -88,20 +88,24 @@ func (out *Output) Write(p []byte) (n int, err error) {
 		return -1, io.EOF
 	}*/
 	output := string(p)
-	if strings.Contains(output, "Opt>") {
-		atomic.StoreUint32(out.JumpserverSession.WebSesion.LoginServer, 0)
-	}
-	if atomic.LoadUint32(out.JumpserverSession.WebSesion.LoginServer) == 0 && (strings.Contains(output, "$") || strings.Contains(output, "#")) {
-		atomic.StoreUint32(out.JumpserverSession.WebSesion.LoginServer, 1)
-	}
-	if out.JumpserverSession.CheckURL != "" && strings.Contains(output, out.JumpserverSession.CheckURL) && !strings.Contains(output, out.JumpserverSession.CheckCommand) {
-		atomic.AddInt32(out.JumpserverSession.CheckCount, 1)
-		log.Println("健康检查", atomic.LoadInt32(out.JumpserverSession.CheckCount))
-		if atomic.LoadInt32(out.JumpserverSession.CheckCount) >= 3 {
-			atomic.StoreUint32(out.JumpserverSession.Health, 1)
+	outputs := strings.Split(output, "\n")
+	for _, output = range outputs {
+		if strings.Contains(output, "Opt>") {
+			atomic.StoreUint32(out.JumpserverSession.WebSesion.LoginServer, 0)
 		}
+		if atomic.LoadUint32(out.JumpserverSession.WebSesion.LoginServer) == 0 && (strings.Contains(output, "$") || strings.Contains(output, "#")) {
+			atomic.StoreUint32(out.JumpserverSession.WebSesion.LoginServer, 1)
+		}
+		if out.JumpserverSession.CheckURL != "" && strings.Contains(output, out.JumpserverSession.CheckURL) && !strings.Contains(output, out.JumpserverSession.CheckCommand) {
+			atomic.AddInt32(out.JumpserverSession.CheckCount, 1)
+			log.Println("健康检查", atomic.LoadInt32(out.JumpserverSession.CheckCount))
+			if atomic.LoadInt32(out.JumpserverSession.CheckCount) >= 2 {
+				atomic.StoreUint32(out.JumpserverSession.Health, 1)
+			}
+		}
+		out.JumpserverSession.WebSesion.OUT <- output
+		log.Println("output:", output)
 	}
-	out.JumpserverSession.WebSesion.OUT <- output
-	//log.Println("output:", output)
+
 	return len(p), nil
 }
