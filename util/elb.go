@@ -45,7 +45,8 @@ type YunConfig struct {
 func OperatLb(operate string) (bool, string) {
 	result := false
 	operates := strings.Split(operate, " ")
-	if len(operate) != 7 {
+	log.Println(operates)
+	if len(operates) != 7 {
 		return false, "args error"
 	} else {
 		yunType := operates[1]
@@ -61,11 +62,11 @@ func OperatLb(operate string) (bool, string) {
 		} else if yunType == "aliyun" {
 			yun = ALIYUN_TYPE
 		}
-
+		log.Println(lbOperate, yunType, lbType, LoadBalancerId, InstanceId, port, yun)
 		if lbOperate == "in" {
-			result = AddBackendServer(LoadBalancerId, InstanceId, port, lbType, yun, yunConfig)
+			result = addBackendServer(LoadBalancerId, InstanceId, port, lbType, yun, yunConfig)
 		} else if lbOperate == "out" {
-			result = RemoveBackendServer(LoadBalancerId, InstanceId, port, lbType, yun, yunConfig)
+			result = removeBackendServer(LoadBalancerId, InstanceId, port, lbType, yun, yunConfig)
 		}
 	}
 	return result, "args error"
@@ -83,7 +84,7 @@ func buildClient(yun string, yunconfig YunConfig) {
 		}
 		config.WithCredentialsChainVerboseErrors(true)
 		awsElbClient = elbv2.New(sess, config)
-		awsLbClient = elb.New(sess, aws.NewConfig().WithRegion(yunConfig.AwsRegion))
+		awsLbClient = elb.New(sess, config)
 	} else if strings.Contains(yun, ALIYUN_TYPE) {
 		var err error
 		// 创建slbClient实例
@@ -99,7 +100,7 @@ func buildClient(yun string, yunconfig YunConfig) {
 	}
 }
 
-func AddBackendServer(LoadBalancerIdOrName string, InstanceId string, port int64, lbType string, yun string, yunconfig YunConfig) bool {
+func addBackendServer(LoadBalancerIdOrName string, InstanceId string, port int64, lbType string, yun string, yunconfig YunConfig) bool {
 	if strings.Contains(yun, AWS_TYPE) {
 		buildClient(yun, yunconfig)
 		if lbType == "alb" {
@@ -177,7 +178,7 @@ func AddBackendServer(LoadBalancerIdOrName string, InstanceId string, port int64
 		request := slb.CreateAddBackendServersRequest()
 		request.BackendServers = fmt.Sprintf("[{\"ServerId\":\"%s\",\"Weight\":\"100\"}]", InstanceId)
 		request.LoadBalancerId = LoadBalancerIdOrName
-		request.Port = fmt.Sprint(port)
+		//request.Port = fmt.Sprint(port)
 		response, err := aliyunClient.AddBackendServers(request)
 		if err != nil {
 			// 异常处理
@@ -191,8 +192,8 @@ func AddBackendServer(LoadBalancerIdOrName string, InstanceId string, port int64
 	return false
 }
 
-func RemoveBackendServer(LoadBalancerIdOrName string, InstanceId string, port int64, lbType string, yun string, yunconfig YunConfig) bool {
-	count := DescribeTargetGroups(LoadBalancerIdOrName, lbType, yun, yunconfig)
+func removeBackendServer(LoadBalancerIdOrName string, InstanceId string, port int64, lbType string, yun string, yunconfig YunConfig) bool {
+	count := describeTargetGroups(LoadBalancerIdOrName, lbType, yun, yunconfig)
 	fmt.Println(count)
 	if count <= 1 {
 		log.Println("Instance count:", count, ",remove fail")
@@ -269,7 +270,7 @@ func RemoveBackendServer(LoadBalancerIdOrName string, InstanceId string, port in
 		request := slb.CreateRemoveBackendServersRequest()
 		request.BackendServers = fmt.Sprintf("[\"%s\"]", InstanceId)
 		request.LoadBalancerId = LoadBalancerIdOrName
-		request.Port = fmt.Sprint(port)
+		//request.Port = fmt.Sprint(port)
 		response, err := aliyunClient.RemoveBackendServers(request)
 		if err != nil {
 			// 异常处理
@@ -284,7 +285,7 @@ func RemoveBackendServer(LoadBalancerIdOrName string, InstanceId string, port in
 	return false
 }
 
-func DescribeTargetGroups(LoadBalancerIdOrName string, lbType string, yun string, yunconfig YunConfig) int {
+func describeTargetGroups(LoadBalancerIdOrName string, lbType string, yun string, yunconfig YunConfig) int {
 	count := 0
 	if strings.Contains(yun, AWS_TYPE) {
 		buildClient(yun, yunconfig)

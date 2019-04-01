@@ -67,6 +67,12 @@ func Execute(wsSesion *session.WsSesion, task string) {
 
 		} else if ms[0] == "LB" {
 
+			ok, msg := OperatLb(m)
+			if !ok {
+				wsSesion.OUT <- msg
+				goto OUT
+			}
+
 		} else if ms[0] == "CHECK" {
 
 			check(wsSesion, ms[1])
@@ -81,6 +87,7 @@ func Execute(wsSesion *session.WsSesion, task string) {
 
 		}
 	}
+OUT:
 }
 
 func check(wsSesion *session.WsSesion, url string) {

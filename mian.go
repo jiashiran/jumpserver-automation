@@ -6,9 +6,15 @@ import (
 
 func main() {
 
-	ws.Service()
+	//util.OperatLb("LB aliyun slb in i-uf68a1l5ulumn2tizgw5 lb-uf6lfi06q95h5bcyxb87e 8089")
+	//util.OperatLb("LB aws alb in i-0e41029513647e310 arn:aws-cn:elasticloadbalancing:cn-north-1:147022339119:targetgroup/sip-sbc-302/1dfa6510b0676035 8089")
+	//util.OperatLb("LB aws elb in i-00722409683af6fab lbaaa 8089")
 
-	//WaitStop()
+	service()
+}
+
+func service() {
+	ws.Service()
 }
 
 /*func WaitStop()  {
