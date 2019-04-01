@@ -104,6 +104,7 @@
             if (xhr.readyState == 4) {
                 if (xhr.status = 200) {
                     var data = JSON.parse(xhr.responseText); //json解析方法JSON.parse 或者 eval('('+xhr.responseText+')')
+                    document.getElementById("all_task").innerHTML = "<option>select</option>";
                     for (var o in data){
                         console.log(o,data[o]);
                         document.getElementById("all_task").innerHTML += '<option>'+o+'</option>'
@@ -140,6 +141,7 @@
                 if (xhr.status = 200) {
                     console.log(xhr.responseText);
                     document.getElementById("task").value=xhr.responseText;
+                    loadTasks();
                 }
             }
         }
@@ -158,6 +160,7 @@
                 if (xhr.status = 200) {
                     console.log(xhr.responseText);
                     document.getElementById("task").value=xhr.responseText;
+                    loadTasks();
                 }
             }
         }
@@ -174,6 +177,7 @@
             if (xhr.readyState == 4) {
                 if (xhr.status = 200) {
                     console.log(xhr.responseText);
+                    loadTasks();
                     loadTasks();
                 }
             }
