@@ -71,6 +71,8 @@ func Execute(wsSesion *session.WsSesion, task string) {
 			if !ok {
 				wsSesion.OUT <- msg
 				goto OUT
+			} else {
+				wsSesion.OUT <- msg + " 操作成功"
 			}
 
 		} else if ms[0] == "CHECK" {
@@ -91,7 +93,7 @@ OUT:
 }
 
 func check(wsSesion *session.WsSesion, url string) {
-	//command := "curl_check=`curl -I -m 10 -o /dev/null -s -w %{http_code} " + url + "`"
+	//command := "curl_check=`" + url + "`"
 	//wsSesion.Session.SendCommand(command)
 	wsSesion.Session.CheckURL = url + " is 200ok"
 	wsSesion.Session.CheckCommand = "echo `if [ $curl_check == 200 ]; then echo \"" + wsSesion.Session.CheckURL + "\"; fi`"
