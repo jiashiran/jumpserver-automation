@@ -116,9 +116,13 @@ func Service() {
 		wsSesion, ok := cons.Load(sessionId)
 		if ok {
 			ws := wsSesion.(*session.WsSesion)
+			ws.OUT <- "close channel session"
+			//close(ws.Session.Out.Out)
+			close(ws.Session.In.In)
 			ws.Session.Close()
 			ws.Session = nil
 			context.Write([]byte("stopExecute sessionId:" + id))
+			ws.C.Emit("chat", "sessionId:"+id+"is closed")
 		} else {
 			context.Write([]byte("no login"))
 		}
@@ -219,6 +223,8 @@ func handleConnection(c websocket.Connection) {
 		wsSesion, ok := cons.Load(c.ID())
 		if ok {
 			ws := wsSesion.(session.WsSesion)
+			close(ws.Session.Out.Out)
+			close(ws.Session.In.In)
 			ws.Session.Close()
 			ws.Client.Close()
 		}
