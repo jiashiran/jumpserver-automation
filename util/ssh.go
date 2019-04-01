@@ -72,7 +72,7 @@ func Execute(wsSesion *session.WsSesion, task string) {
 				wsSesion.OUT <- msg
 				goto OUT
 			} else {
-				wsSesion.OUT <- msg + " 操作成功"
+				wsSesion.OUT <- m + " 操作成功"
 			}
 
 		} else if ms[0] == "CHECK" {
@@ -87,19 +87,22 @@ func Execute(wsSesion *session.WsSesion, task string) {
 			}
 			time.Sleep(second)
 
+		} else if ms[0] == "UPLOAD" {
+
+			UploadPath(wsSesion.Client, ms[1], ms[2])
 		}
 	}
 OUT:
 }
 
 func check(wsSesion *session.WsSesion, url string) {
-	//command := "curl_check=`" + url + "`"
-	//wsSesion.Session.SendCommand(command)
+	command := "curl_check=`curl -I -m 10 -o /dev/null -s -w %{http_code} " + url + "`"
+	wsSesion.Session.SendCommand(command)
 	wsSesion.Session.CheckURL = url + " is 200ok"
-	wsSesion.Session.CheckCommand = "echo `if [ $curl_check == 200 ]; then echo \"" + wsSesion.Session.CheckURL + "\"; fi`"
+	wsSesion.Session.CheckCommand = "echo `if [[ $curl_check == 200 ]]; then echo \"" + wsSesion.Session.CheckURL + "\"; fi`"
 	atomic.StoreInt32(wsSesion.Session.CheckCount, 0)
 	for atomic.StoreUint32(wsSesion.Session.Health, 0); atomic.LoadUint32(wsSesion.Session.Health) == 0; {
-		log.Println("check url:", url)
+		//log.Println("check url:", url)
 		wsSesion.Session.SendCommand("curl -I -m 10 -s " + url)
 		wsSesion.Session.SendCommand(wsSesion.Session.CheckCommand)
 		time.Sleep(10 * time.Second)
@@ -195,7 +198,6 @@ func NewSession(client *ssh.Client, wsSesion *session.WsSesion) *session.Jumpser
 		err = s.Wait()
 		CheckErr(err, "session wait")
 		log.Println("session over")
-		wsSesion.OUT <- "close channel session"
 	}(sshSession)
 	go func() {
 		for {
@@ -276,7 +278,7 @@ func uploadPath(file string, sftp *sftp.Client, remotePath string) {
 		//mkdir
 		path := remotePath + Separator + fileInfo.Name()
 		sftp.Mkdir(path)
-		//log.Println(path)
+		log.Println(path)
 
 		fileInfo, err := inputFile.Readdir(-1)
 		if err == nil {
@@ -289,7 +291,7 @@ func uploadPath(file string, sftp *sftp.Client, remotePath string) {
 
 	} else {
 		//copy file
-		//log.Println(remotePath + Separator + fileInfo.Name())
+		log.Println(remotePath + Separator + fileInfo.Name())
 		uploadFile(sftp, file, remotePath+Separator+fileInfo.Name())
 	}
 
@@ -304,7 +306,7 @@ func uploadFile(sftp *sftp.Client, localFile, remotePath string) {
 	inputFile, inputError := os.Open(localFile)
 	//fileInfo , err := inputFile.Stat();
 	defer inputFile.Close()
-
+	log.Println(remotePath)
 	f, err := sftp.Create(remotePath)
 
 	if err != nil {
