@@ -8,6 +8,7 @@ require (
 	github.com/aliyun/alibaba-cloud-sdk-go v0.0.0-20190321091342-e14bf122513a
 	github.com/aws/aws-sdk-go v1.19.1
 	github.com/boltdb/bolt v1.3.1
+	github.com/kataras/golog v0.0.0-20180321173939-03be10146386
 	github.com/kataras/iris v11.1.1+incompatible
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/pkg/errors v0.8.1 // indirect

@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"github.com/kataras/iris"
 	"github.com/kataras/iris/context"
-	"github.com/kataras/iris/middleware/recover"
+	iris_recover "github.com/kataras/iris/middleware/recover"
 	"github.com/kataras/iris/websocket"
 	"io/ioutil"
 	"jumpserver-automation/session"
 	"jumpserver-automation/store"
 	"jumpserver-automation/util"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"strings"
 	"sync"
 )
@@ -19,8 +21,11 @@ import (
 var cons sync.Map
 
 func Service() {
+	go func() {
+		log.Println(http.ListenAndServe(":6060", nil))
+	}()
 	app := iris.New()
-	app.Use(recover.New())
+	app.Use(iris_recover.New())
 	app.Get("/", func(ctx iris.Context) {
 		ctx.ServeFile("static/websockets.html", false) // second parameter: enable gzip?
 	})
@@ -222,11 +227,19 @@ func handleConnection(c websocket.Connection) {
 	c.OnDisconnect(func() {
 		wsSesion, ok := cons.Load(c.ID())
 		if ok {
-			ws := wsSesion.(session.WsSesion)
-			close(ws.Session.Out.Out)
+			defer func() {
+				if err := recover(); err != nil {
+					log.Println("close wsSesion error")
+				}
+			}()
+			ws := wsSesion.(*session.WsSesion)
+			ws.OUT <- "close channel session"
 			close(ws.Session.In.In)
+			close(ws.Session.Out.Out)
 			ws.Session.Close()
 			ws.Client.Close()
+			ws.Session = nil
+			ws.Client = nil
 		}
 		cons.Delete(c.ID())
 		log.Println("delete session:", c.ID())

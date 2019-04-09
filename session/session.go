@@ -53,7 +53,10 @@ func (in *Input) Read(p []byte) (n int, err error) {
 		}
 	}()
 	log.Println("wait read...")
-	str := <-in.In
+	str, isOpen := <-in.In
+	if !isOpen {
+		return 0, io.EOF
+	}
 	if strings.Index(str, "\n") <= 0 {
 		str = str + "\n"
 	}
@@ -101,10 +104,17 @@ func (out *Output) Write(p []byte) (n int, err error) {
 			log.Println("健康检查", atomic.LoadInt32(out.JumpserverSession.CheckCount))
 			if atomic.LoadInt32(out.JumpserverSession.CheckCount) >= 2 {
 				atomic.StoreUint32(out.JumpserverSession.Health, 1)
+				out.JumpserverSession.WebSesion.OUT <- "健康监测成功"
 			}
 		}
+		/*if out.JumpserverSession.CheckURL != "" && out.JumpserverSession.CheckCommand != "" && !strings.Contains(output, out.JumpserverSession.CheckCommand){
+
+		}*/
 		out.JumpserverSession.WebSesion.OUT <- output
-		log.Println("output:", output)
+		/*if strings.Contains(output,"nameserver") || strings.Contains(output,"B_") || strings.Contains(output,"VLINK_"){
+			out.JumpserverSession.WebSesion.OUT <- output
+		}*/
+		//log.Println("output:", output)
 	}
 
 	return len(p), nil

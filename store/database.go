@@ -83,7 +83,7 @@ func SelectAll() map[string]string {
 		c := b.Cursor()
 
 		for k, v := c.First(); k != nil; k, v = c.Next() {
-			fmt.Printf("key=%s, value=%s\n", k, v)
+			//fmt.Printf("key=%s, value=%s\n", k, v)
 			m[string(k)] = string(v)
 		}
 

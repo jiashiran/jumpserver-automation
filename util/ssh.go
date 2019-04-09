@@ -38,6 +38,7 @@ func Jump(user string, password string, ip string, port int, c websocket.Connect
 }
 
 func Execute(wsSesion *session.WsSesion, task string) {
+
 	if wsSesion.Client != nil && wsSesion.Session == nil {
 		wsSesion.Session = NewSession(wsSesion.Client, wsSesion)
 	}
@@ -47,6 +48,12 @@ func Execute(wsSesion *session.WsSesion, task string) {
 	for i, m := range commands {
 
 		log.Println(i, m)
+
+		if strings.Contains(m, "//") {
+			//log.Println("注释：",m)
+			continue
+		}
+
 		ms := strings.Split(m, " ")
 
 		if ms[0] == "LOGIN" {
@@ -101,6 +108,7 @@ func check(wsSesion *session.WsSesion, url string) {
 	wsSesion.Session.CheckURL = url + " is 200ok"
 	wsSesion.Session.CheckCommand = "echo `if [[ $curl_check == 200 ]]; then echo \"" + wsSesion.Session.CheckURL + "\"; fi`"
 	atomic.StoreInt32(wsSesion.Session.CheckCount, 0)
+	wsSesion.OUT <- "开始健康监测\n"
 	for atomic.StoreUint32(wsSesion.Session.Health, 0); atomic.LoadUint32(wsSesion.Session.Health) == 0; {
 		//log.Println("check url:", url)
 		wsSesion.Session.SendCommand("curl -I -m 10 -s " + url)
@@ -202,13 +210,15 @@ func NewSession(client *ssh.Client, wsSesion *session.WsSesion) *session.Jumpser
 	go func() {
 		for {
 			select {
-			case msg := <-wsSesion.OUT:
-				{
+			case msg, isOpen := <-wsSesion.OUT:
+				if isOpen {
 					wsSesion.C.Emit("chat", msg)
 					if msg == "close channel session" {
 						goto CLOSE
 					}
 					break
+				} else {
+					goto CLOSE
 				}
 
 			}

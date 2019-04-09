@@ -1,7 +1,12 @@
 package main
 
 import (
+	"bufio"
+	"github.com/kataras/golog"
+	"io"
 	"jumpserver-automation/ws"
+	"os"
+	"strings"
 )
 
 func main() {
@@ -11,6 +16,34 @@ func main() {
 	//util.OperatLb("LB aws elb in i-00722409683af6fab lbaaa 8089")
 
 	service()
+
+	/*ReadLine("/Users/jiashiran/Documents/all_host.txt", func(s string) {
+		fmt.Println("LOGIN "+s)
+		fmt.Println("SHELL  cat /etc/resolv.conf | grep nameserver")
+		fmt.Println("SLEEP 3s")
+		fmt.Println("LOGOUT")
+	})*/
+}
+
+func ReadLine(fileName string, handler func(string)) error {
+	f, err := os.Open(fileName)
+	if err != nil {
+		golog.Info(err)
+		return err
+	}
+	buf := bufio.NewReader(f)
+	for {
+		line, err := buf.ReadString('\n')
+		line = strings.TrimSpace(line)
+		handler(line)
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 func service() {

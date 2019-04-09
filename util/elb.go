@@ -27,7 +27,7 @@ var (
 
 		AliyunRegion:          "",
 		AliyunAccessKey:       "",
-		AliyunAecretAccessKey: "",
+		AliyunAecretAccessKey: "", //
 	}
 )
 
