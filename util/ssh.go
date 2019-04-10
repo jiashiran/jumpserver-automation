@@ -9,8 +9,8 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
 	"io"
+	"jumpserver-automation/log"
 	"jumpserver-automation/session"
-	"log"
 	"net"
 	"os"
 	"strconv"
@@ -28,7 +28,7 @@ func Jump(user string, password string, ip string, port int, c websocket.Connect
 		Port:     port,
 	}, c, wsSesion)
 	if err != nil {
-		log.Println("gt client err:", err)
+		log.Logger.Error("gt client err:", err)
 		return nil, nil
 	}
 
@@ -47,10 +47,10 @@ func Execute(wsSesion *session.WsSesion, task string) {
 
 	for i, m := range commands {
 
-		log.Println(i, m)
+		log.Logger.Info(i, m)
 
 		if strings.Contains(m, "//") {
-			//log.Println("注释：",m)
+			//log.Logger.log.Logger.Logger.ln("注释：",m)
 			continue
 		}
 
@@ -62,14 +62,19 @@ func Execute(wsSesion *session.WsSesion, task string) {
 		} else if ms[0] == "LOGOUT" {
 
 			for atomic.LoadUint32(wsSesion.LoginServer) > 0 {
-				log.Println("loginServer:", wsSesion.LoginServer, wsSesion.ID)
-				wsSesion.Session.SendCommand("exit")
+				log.Logger.Info("loginServer:", wsSesion.LoginServer, wsSesion.ID)
+				err := wsSesion.Session.SendCommand("exit")
+				log.Logger.Error("logout error:", err)
+				if err != nil {
+					log.Logger.Error("LOGOUT SendCommand error:", err)
+					break
+				}
 				time.Sleep(3 * time.Second)
 			}
 
 		} else if ms[0] == "SHELL" {
 
-			log.Println("shell")
+			log.Logger.Info("shell")
 			wsSesion.Session.SendCommand(strings.ReplaceAll(m, "SHELL", ""))
 
 		} else if ms[0] == "LB" {
@@ -82,6 +87,11 @@ func Execute(wsSesion *session.WsSesion, task string) {
 				wsSesion.OUT <- m + " 操作成功"
 			}
 
+		} else if ms[0] == "LB-INFO" {
+
+			msg := LbINFO(m)
+			wsSesion.OUT <- "LB实例信息：" + msg
+
 		} else if ms[0] == "CHECK" {
 
 			check(wsSesion, ms[1])
@@ -90,7 +100,7 @@ func Execute(wsSesion *session.WsSesion, task string) {
 
 			second, err := time.ParseDuration(ms[1])
 			if err != nil {
-				log.Println("parse int error :", err)
+				log.Logger.Error("parse int error :", err)
 			}
 			time.Sleep(second)
 
@@ -110,7 +120,7 @@ func check(wsSesion *session.WsSesion, url string) {
 	atomic.StoreInt32(wsSesion.Session.CheckCount, 0)
 	wsSesion.OUT <- "开始健康监测\n"
 	for atomic.StoreUint32(wsSesion.Session.Health, 0); atomic.LoadUint32(wsSesion.Session.Health) == 0; {
-		//log.Println("check url:", url)
+		//log.Logger.log.Logger.Logger.ln("check url:", url)
 		wsSesion.Session.SendCommand("curl -I -m 10 -s " + url)
 		wsSesion.Session.SendCommand(wsSesion.Session.CheckCommand)
 		time.Sleep(10 * time.Second)
@@ -131,7 +141,7 @@ func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection, wsSesio
 	authMethods = append(authMethods, ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) ([]string, error) {
 		answers := make([]string, 0, len(questions))
 		for i, q := range questions {
-			fmt.Print(q)
+			log.Logger.Info(q)
 			c.Emit("chat", q)
 			if echos[i] {
 				/*scan := bufio.NewScanner(os.Stdin)
@@ -143,7 +153,7 @@ func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection, wsSesio
 					return nil, err
 				}*/
 				MFA := <-wsSesion.IN
-				fmt.Println("MFA:", MFA)
+				log.Logger.Info("MFA:", MFA)
 				answers = append(answers, MFA)
 			} else {
 				b, err := terminal.ReadPassword(int(syscall.Stdin))
@@ -165,13 +175,13 @@ func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection, wsSesio
 	var err error = nil
 	defer func() {
 		if e := recover(); e != nil {
-			log.Println("ssh Dial error:", e)
+			log.Logger.Error("ssh Dial error:", e)
 			err = errors.New(fmt.Sprint(e))
 		}
 	}()
 	client, err := ssh.Dial("tcp", conf.Ip+":"+strconv.Itoa(conf.Port), &config)
 	if err != nil {
-		log.Println("Failed to dial: " + err.Error())
+		log.Logger.Error("Failed to dial: " + err.Error())
 		return nil, err
 	}
 
@@ -194,7 +204,7 @@ func NewSession(client *ssh.Client, wsSesion *session.WsSesion) *session.Jumpser
 	}
 	err = sshSession.RequestPty("xterm", 100, 200, modes)
 	if err != nil {
-		log.Println(errors.New("unable request pty  " + err.Error()))
+		log.Logger.Error(errors.New("unable request pty  " + err.Error()))
 	}
 	var checkCount int32 = 0
 	var health uint32 = 0
@@ -205,7 +215,7 @@ func NewSession(client *ssh.Client, wsSesion *session.WsSesion) *session.Jumpser
 		CheckErr(err, "session shell")
 		err = s.Wait()
 		CheckErr(err, "session wait")
-		log.Println("session over")
+		log.Logger.Info("session over")
 	}(sshSession)
 	go func() {
 		for {
@@ -224,7 +234,7 @@ func NewSession(client *ssh.Client, wsSesion *session.WsSesion) *session.Jumpser
 			}
 		}
 	CLOSE:
-		log.Println("close channel session")
+		log.Logger.Info("close channel session")
 	}()
 
 	return jumpserverSession
@@ -253,7 +263,7 @@ func NewSession(client *ssh.Client, wsSesion *session.WsSesion) *session.Jumpser
 func GetSftp(client *ssh.Client) *sftp.Client {
 	sftp, err := sftp.NewClient(client)
 	if err != nil {
-		log.Println("GetSftp.error", err)
+		log.Logger.Error("GetSftp.error", err)
 	}
 	return sftp
 }
@@ -275,12 +285,12 @@ func UploadPath(client *ssh.Client, localPath, remotePath string) {
 func uploadPath(file string, sftp *sftp.Client, remotePath string) {
 	inputFile, inputError := os.Open(file)
 	if inputError != nil {
-		log.Println(os.Stderr, "File Error: %s\n", inputError)
+		log.Logger.Error(os.Stderr, "File Error: %s\n", inputError)
 	}
 
 	fileInfo, err := inputFile.Stat()
 	if err != nil {
-		log.Println("fileinfo err:", err)
+		log.Logger.Error("fileinfo err:", err)
 	}
 	defer inputFile.Close()
 
@@ -288,7 +298,7 @@ func uploadPath(file string, sftp *sftp.Client, remotePath string) {
 		//mkdir
 		path := remotePath + Separator + fileInfo.Name()
 		sftp.Mkdir(path)
-		log.Println(path)
+		log.Logger.Error(path)
 
 		fileInfo, err := inputFile.Readdir(-1)
 		if err == nil {
@@ -301,7 +311,7 @@ func uploadPath(file string, sftp *sftp.Client, remotePath string) {
 
 	} else {
 		//copy file
-		log.Println(remotePath + Separator + fileInfo.Name())
+		log.Logger.Info(remotePath + Separator + fileInfo.Name())
 		uploadFile(sftp, file, remotePath+Separator+fileInfo.Name())
 	}
 
@@ -311,20 +321,20 @@ func uploadPath(file string, sftp *sftp.Client, remotePath string) {
 上传文件
 */
 func uploadFile(sftp *sftp.Client, localFile, remotePath string) {
-	log.Println(localFile, ",", remotePath)
+	log.Logger.Info(localFile, ",", remotePath)
 	// leave your mark
 	inputFile, inputError := os.Open(localFile)
 	//fileInfo , err := inputFile.Stat();
 	defer inputFile.Close()
-	log.Println(remotePath)
+	log.Logger.Info(remotePath)
 	f, err := sftp.Create(remotePath)
 
 	if err != nil {
-		log.Println("sftp.Create.err", err)
+		log.Logger.Error("sftp.Create.err", err)
 	}
 
 	if inputError != nil {
-		log.Println("File Error: %s\n", inputError)
+		log.Logger.Error("File Error: %s\n", inputError)
 	}
 
 	fileReader := bufio.NewReader(inputFile)
@@ -336,22 +346,22 @@ func uploadFile(sftp *sftp.Client, localFile, remotePath string) {
 			break
 		}
 		counter++
-		//fmt.Printf("%d,%s", n, string(buf))
+		//fmt.log.Logger.Logger.f("%d,%s", n, string(buf))
 		if n == 0 {
 			break
 		}
-		//fmt.Println(string(buf))
+		//fmt.log.Logger.Logger.ln(string(buf))
 		if _, err := f.Write(buf[0:n]); err != nil {
-			log.Println(err)
+			log.Logger.Error(err)
 		}
 
 	}
 	// check it's there
 	fi, err := sftp.Lstat(remotePath)
 	if err != nil {
-		log.Println("sftp.Lstat.error", err)
+		log.Logger.Error("sftp.Lstat.error", err)
 	}
-	log.Println(fi)
+	log.Logger.Info(fi)
 
 }
 
@@ -361,7 +371,7 @@ func uploadFile(sftp *sftp.Client, localFile, remotePath string) {
 func RemoveFile(remoateFile string, sftp *sftp.Client) {
 	err := sftp.Remove(remoateFile)
 	if err != nil {
-		log.Println(err)
+		log.Logger.Error(err)
 	}
 }
 
@@ -376,12 +386,12 @@ func ListPath(sftp *sftp.Client, remotePath string) {
 		if w.Err() != nil {
 			continue
 		}
-		log.Println(w.Path())
+		log.Logger.Info(w.Path())
 	}
 }
 
 func CheckErr(err error, msg string) {
 	if err != nil {
-		log.Println(msg+" err:", err)
+		log.Logger.Error(msg+" err:", err)
 	}
 }
