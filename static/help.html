@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Help</title>
+</head>
+<body>
+  <div>
+      <h1>任务命令说明：</h1>
+      <table class="imagetable">
+          <thead>
+          <tr>
+              <td>命令</td><td>参数</td><td width="130">说明</td><td>例子</td>
+          </tr>
+          </thead>
+          <tbody>
+          <tr>
+              <td>LOGIN</td><td>无</td><td>登录实例</td><td>LOGIN VB_ALI1_VLINK2_IVR_REALTIME_1_10.9.103.144</td>
+          </tr>
+          <tr>
+              <td>SHELL</td><td>command</td><td>执行命令</td><td>SHELL sudo su -</td>
+          </tr>
+          <tr>
+              <td>CHECK</td><td>url</td><td>健康检查,每隔10秒检查一次，3次返回200认为成功</td><td>CHECK localhost:8090/metrics</td>
+          </tr>
+          <tr>
+              <td>LB</td>
+              <td>yunType lbType operateType InstanceId LoadBalancerIdOrName port</td>
+              <td>负载均衡器操作,lb中最少有一台实例<br/>yunType:aws或aliyun<br/>lbType:alb或elb或sbc<br/>operateType:in或out</td>
+              <td>
+                  LB aliyun slb out i-uf68a1l5ulumn2tizgw5 lb-uf6q9ja04uiovd7kax1tm 8091   从阿里云slb中删除实例<br/>
+                  LB aliyun slb in i-uf68a1l5ulumn2tizgw5 lb-uf6q9ja04uiovd7kax1tm 8091   向阿里云slb中添加实例<br/>
+
+                  LB aws alb out i-0e41029513647e310 arn:aws-cn:elasticloadbalancing:cn-north-1:147022339119:targetgroup/sip-sbc-302/1dfa6510b0676035 8089  从aws的alb中删除实例<br/>
+                  LB aws alb in i-0e41029513647e310 arn:aws-cn:elasticloadbalancing:cn-north-1:147022339119:targetgroup/sip-sbc-302/1dfa6510b0676035 8089  向aws的alb中添加实例<br/>
+
+                  LB aws elb out i-00722409683af6fab lbaaa 8089  从aws的传统elb中删除实例<br/>
+                  LB aws elb in i-00722409683af6fab lbaaa 8089  向aws的传统elb中添加实例<br/>
+              </td>
+          </tr>
+          <tr>
+              <td>SLEEP</td><td>int</td><td>休眠一段时间</td><td>SLEEP 10s  休眠10秒钟</td>
+          </tr>
+          <tr>
+              <td>LOGOUT</td><td>无</td><td>退出实例</td><td>LOGOUT</td>
+          </tr>
+          <tr>
+              <td>//</td><td></td><td>//开头为注释</td><td>//注释</td>
+          </tr>
+          </tbody>
+      </table>
+  </div>
+</body>
+<style type="text/css">
+    table.imagetable {
+        font-family: verdana,arial,sans-serif;
+        font-size:11px;
+        color:#333333;
+        border-width: 1px;
+        border-color: #999999;
+        border-collapse: collapse;
+    }
+    table.imagetable th {
+        /*background:#b5cfd2 url('cell-blue.jpg');*/
+        border-width: 1px;
+        padding: 8px;
+        border-style: solid;
+        border-color: #999999;
+    }
+    table.imagetable td {
+        /*background:#dcddc0 url('cell-grey.jpg');*/
+        border-width: 1px;
+        padding: 8px;
+        border-style: solid;
+        border-color: #999999;
+    }
+</style>
+</html>
