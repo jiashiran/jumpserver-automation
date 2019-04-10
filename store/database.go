@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/boltdb/bolt"
-	"log"
+	"jumpserver-automation/log"
 	"time"
 )
 
@@ -18,12 +18,12 @@ func init() {
 	var err error
 	db, err = bolt.Open(DB, 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
-		log.Println("open database error:", err)
+		log.Logger.Error("open database error:", err)
 	}
 	if err != nil {
-		log.Println(err)
+		log.Logger.Error(err)
 	}
-	log.Println("create database")
+	log.Logger.Info("create database")
 }
 
 func Update(key string, value string) {
@@ -46,7 +46,7 @@ func Select(key string) string {
 		}()
 		b, err := tx.CreateBucketIfNotExists(Bucket)
 		if err != nil {
-			log.Println("Select error:", err)
+			log.Logger.Error("Select error:", err)
 			return err
 		}
 		bd = b.Get([]byte(key))
@@ -61,7 +61,7 @@ func Delete(key string) error {
 	db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists(Bucket)
 		if err != nil {
-			log.Println("Delete error:", err)
+			log.Logger.Error("Delete error:", err)
 			return err
 		}
 		err = b.Delete([]byte(key))
@@ -76,7 +76,7 @@ func SelectAll() map[string]string {
 	db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists(Bucket)
 		if err != nil {
-			log.Println("SelectAll error:", err)
+			log.Logger.Error("SelectAll error:", err)
 			return err
 		}
 
