@@ -1,10 +1,12 @@
 package session
 
 import (
+	"errors"
+	"fmt"
 	"github.com/kataras/iris/websocket"
 	"golang.org/x/crypto/ssh"
 	"io"
-	"log"
+	"jumpserver-automation/log"
 	"strings"
 	"sync/atomic"
 )
@@ -31,14 +33,16 @@ type JumpserverSession struct {
 	CheckCommand string
 }
 
-func (s *JumpserverSession) SendCommand(command string) {
+func (s *JumpserverSession) SendCommand(command string) (e error) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Println("SendCommand error:", err)
+			log.Logger.Error("SendCommand error:", err)
+			e = errors.New(fmt.Sprintf("SendCommand error %s", err))
 		}
 	}()
 	s.In.In <- command
-	log.Println("send command:", command)
+	log.Logger.Info("send command:", command)
+	return e
 }
 
 type Input struct {
@@ -48,11 +52,11 @@ type Input struct {
 func (in *Input) Read(p []byte) (n int, err error) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Println("Read error:", err)
+			log.Logger.Error("Read error:", err)
 			close(in.In)
 		}
 	}()
-	log.Println("wait read...")
+	log.Logger.Info("wait read...")
 	str, isOpen := <-in.In
 	if !isOpen {
 		return 0, io.EOF
@@ -60,7 +64,7 @@ func (in *Input) Read(p []byte) (n int, err error) {
 	if strings.Index(str, "\n") <= 0 {
 		str = str + "\n"
 	}
-	//log.Println("receive command:", str)
+	//log.Logger.Println("receive command:", str)
 	if str == io.EOF.Error() {
 		return 0, io.EOF
 	}
@@ -82,12 +86,12 @@ type Output struct {
 func (out *Output) Write(p []byte) (n int, err error) {
 	/*defer func() {
 		if err := recover(); err != nil {
-			log.Println("Write error:", err)
+			log.Logger.Println("Write error:", err)
 			close(out.Out)
 		}
 	}()*/
 	/*if len(p) == 0 {
-		log.Println("session close")
+		log.Logger.Println("session close")
 		return -1, io.EOF
 	}*/
 	output := string(p)
@@ -101,8 +105,8 @@ func (out *Output) Write(p []byte) (n int, err error) {
 		}
 		if out.JumpserverSession.CheckURL != "" && strings.Contains(output, out.JumpserverSession.CheckURL) && !strings.Contains(output, out.JumpserverSession.CheckCommand) {
 			atomic.AddInt32(out.JumpserverSession.CheckCount, 1)
-			log.Println("健康检查", atomic.LoadInt32(out.JumpserverSession.CheckCount))
-			if atomic.LoadInt32(out.JumpserverSession.CheckCount) >= 2 {
+			log.Logger.Info("健康检查", atomic.LoadInt32(out.JumpserverSession.CheckCount))
+			if atomic.LoadInt32(out.JumpserverSession.CheckCount) >= 3 {
 				atomic.StoreUint32(out.JumpserverSession.Health, 1)
 				out.JumpserverSession.WebSesion.OUT <- "健康监测成功"
 			}
@@ -114,7 +118,7 @@ func (out *Output) Write(p []byte) (n int, err error) {
 		/*if strings.Contains(output,"nameserver") || strings.Contains(output,"B_") || strings.Contains(output,"VLINK_"){
 			out.JumpserverSession.WebSesion.OUT <- output
 		}*/
-		//log.Println("output:", output)
+		//log.Logger.Println("output:", output)
 	}
 
 	return len(p), nil
