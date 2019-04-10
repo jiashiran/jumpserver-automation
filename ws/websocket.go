@@ -2,16 +2,15 @@ package ws
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/kataras/iris"
 	"github.com/kataras/iris/context"
 	iris_recover "github.com/kataras/iris/middleware/recover"
 	"github.com/kataras/iris/websocket"
 	"io/ioutil"
+	"jumpserver-automation/log"
 	"jumpserver-automation/session"
 	"jumpserver-automation/store"
 	"jumpserver-automation/util"
-	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"strings"
@@ -22,12 +21,15 @@ var cons sync.Map
 
 func Service() {
 	go func() {
-		log.Println(http.ListenAndServe(":6060", nil))
+		log.Logger.Info(http.ListenAndServe(":6060", nil))
 	}()
 	app := iris.New()
 	app.Use(iris_recover.New())
 	app.Get("/", func(ctx iris.Context) {
 		ctx.ServeFile("static/websockets.html", false) // second parameter: enable gzip?
+	})
+	app.Get("/help", func(ctx iris.Context) {
+		ctx.ServeFile("static/help.html", true) // second parameter: enable gzip?
 	})
 
 	app.Get("/tasks/list", func(context context.Context) {
@@ -44,8 +46,8 @@ func Service() {
 		wsSesion, ok := cons.Load(sessionId)
 		if ok {
 			ws := wsSesion.(*session.WsSesion)
-			log.Println(ws.ID)
-			log.Println("get task", id)
+			log.Logger.Info(ws.ID)
+			log.Logger.Info("get task", id)
 			m := store.Select(id)
 			context.Write([]byte(m))
 		} else {
@@ -62,11 +64,11 @@ func Service() {
 		wsSesion, ok := cons.Load(sessionId)
 		if ok {
 			ws := wsSesion.(*session.WsSesion)
-			log.Println(ws.ID)
-			log.Println("execute task :", id)
+			log.Logger.Info(ws.ID)
+			log.Logger.Info("execute task :", id)
 			m := store.Select(id)
 			util.Execute(ws, m)
-			context.Write([]byte("ok"))
+			context.Write([]byte("执行成功"))
 		} else {
 			context.Write([]byte("no login"))
 		}
@@ -80,11 +82,11 @@ func Service() {
 		wsSesion, ok := cons.Load(sessionId)
 		if ok {
 			ws := wsSesion.(*session.WsSesion)
-			log.Println(ws.ID)
-			log.Println("update task :", id)
+			log.Logger.Info(ws.ID)
+			log.Logger.Info("update task :", id)
 			body, err := ioutil.ReadAll(context.Request().Body)
 			if err != nil {
-				log.Println(err)
+				log.Logger.Error(err)
 				context.Write([]byte(err.Error()))
 			} else {
 				store.Update(id, string(body))
@@ -104,8 +106,8 @@ func Service() {
 		wsSesion, ok := cons.Load(sessionId)
 		if ok {
 			ws := wsSesion.(*session.WsSesion)
-			log.Println(ws.ID)
-			log.Println("delete task :", id)
+			log.Logger.Info(ws.ID)
+			log.Logger.Info("delete task :", id)
 			store.Delete(id)
 			context.Write([]byte(id + " deleted ok"))
 		} else {
@@ -139,7 +141,7 @@ func Service() {
 	// http://localhost:8080
 	// http://localhost:8080
 	// write something, press submit, see the result.
-	app.Run(iris.Addr(":8080"), iris.WithoutServerError(iris.ErrServerClosed))
+	app.Run(iris.Addr(":8089"), iris.WithoutServerError(iris.ErrServerClosed))
 	defer func() {
 		store.Close()
 	}()
@@ -166,7 +168,7 @@ func handleConnection(c websocket.Connection) {
 	// Read events from browser
 	c.On("chat", func(msg string) {
 		// Print the message to the console, c.Context() is the iris's http context.
-		fmt.Printf("%s resive sent: %s\n", c.Context().RemoteAddr(), msg)
+		log.Logger.Infof("%s resive sent: %s\n", c.Context().RemoteAddr(), msg)
 		var ws *session.WsSesion
 		wsSesion, ok := cons.Load(c.ID())
 		if !ok {
@@ -174,10 +176,10 @@ func handleConnection(c websocket.Connection) {
 			wsSesion = &session.WsSesion{ID: c.ID(), OUT: make(chan string, 500), IN: make(chan string), LoginServer: &loginServer}
 			cons.Store(c.ID(), wsSesion)
 			ws = wsSesion.(*session.WsSesion)
-			log.Println("create new session:", c.ID())
+			log.Logger.Info("create new session:", c.ID())
 		} else {
 			ws = wsSesion.(*session.WsSesion)
-			log.Println(ws.ID, msg)
+			log.Logger.Info(ws.ID, msg)
 		}
 
 		if strings.Contains(msg, "jump") {
@@ -186,7 +188,7 @@ func handleConnection(c websocket.Connection) {
 				ws.C = c
 				client, jumpserverSession := util.Jump(ms[1], ms[2], "", 0, c, ws)
 				if client == nil {
-					log.Println("logon fail")
+					log.Logger.Error("logon fail")
 					return
 				}
 				ws := wsSesion.(*session.WsSesion)
@@ -195,24 +197,6 @@ func handleConnection(c websocket.Connection) {
 				jumpserverSession.WebSesion = ws
 				c.Emit("chat", "WebSocketId:"+c.ID())
 
-				/*go func() {
-
-					for {
-						select {
-						case msg := <-ws.OUT:
-							{
-								c.Emit("chat", msg)
-								if msg == "close channel session" {
-									goto CLOSE
-								}
-								break
-							}
-
-						}
-					}
-				CLOSE:
-					log.Println("close channel session")
-				}()*/
 			}()
 
 		} else if strings.Contains(msg, "[MFA auth]: ") {
@@ -221,7 +205,6 @@ func handleConnection(c websocket.Connection) {
 		// Write message back to the client message owner with:
 
 		// Write message to all except this client with:
-		//c.To(websocket.Broadcast).Emit("chat","aaaaaaaaa")
 	})
 
 	c.OnDisconnect(func() {
@@ -229,7 +212,7 @@ func handleConnection(c websocket.Connection) {
 		if ok {
 			defer func() {
 				if err := recover(); err != nil {
-					log.Println("close wsSesion error")
+					log.Logger.Error("close wsSesion error", err)
 				}
 			}()
 			ws := wsSesion.(*session.WsSesion)
@@ -242,7 +225,7 @@ func handleConnection(c websocket.Connection) {
 			ws.Client = nil
 		}
 		cons.Delete(c.ID())
-		log.Println("delete session:", c.ID())
+		log.Logger.Info("delete session:", c.ID())
 	})
 }
 
@@ -305,14 +288,14 @@ func param(urlStr string) map[string]string {
 
 	}
 
-	//log.Println("参数url:")
-	//log.Println(parameterStr)
-	/*log.Println("请求url:")
-	log.Println(requsetStr)
-	log.Println("参数字典:")
-	log.Println(parameterDict)
-	log.Println("请求的字典：")
-	log.Println(requestSlice)*/
+	//log.Logger.Println("参数url:")
+	//log.Logger.Println(parameterStr)
+	/*log.Logger.Println("请求url:")
+	log.Logger.Println(requsetStr)
+	log.Logger.Println("参数字典:")
+	log.Logger.Println(parameterDict)
+	log.Logger.Println("请求的字典：")
+	log.Logger.Println(requestSlice)*/
 
 	return parameterDict
 }
