@@ -101,10 +101,10 @@ func NewShell(client *ssh.Client) *ssh.Session {
 
 func Shell() {
 	client, err := NewJumpserverClient(&JumpserverConfig{
-		User:     "jiasr",
-		Password: "81451529Jsr!",
-		Ip:       "119.40.32.58",
-		Port:     62012,
+		User:     "",
+		Password: "",
+		Ip:       "",
+		Port:     0,
 	})
 	if err != nil {
 		log.Fatal("gt client err:", err)
