@@ -103,10 +103,10 @@ func (out *Output) Write(p []byte) (n int, err error) {
 		if atomic.LoadUint32(out.JumpserverSession.WebSesion.LoginServer) == 0 && (strings.Contains(output, "$") || strings.Contains(output, "#")) {
 			atomic.StoreUint32(out.JumpserverSession.WebSesion.LoginServer, 1)
 		}
-		if out.JumpserverSession.CheckURL != "" && strings.Contains(output, out.JumpserverSession.CheckURL) && !strings.Contains(output, out.JumpserverSession.CheckCommand) {
+		if out.JumpserverSession.CheckURL != "" && strings.Contains(output, "HTTP/1.1 200") {
 			atomic.AddInt32(out.JumpserverSession.CheckCount, 1)
 			log.Logger.Info("健康检查", atomic.LoadInt32(out.JumpserverSession.CheckCount))
-			if atomic.LoadInt32(out.JumpserverSession.CheckCount) >= 3 {
+			if atomic.LoadInt32(out.JumpserverSession.CheckCount) >= 2 {
 				atomic.StoreUint32(out.JumpserverSession.Health, 1)
 				out.JumpserverSession.WebSesion.OUT <- "健康监测成功"
 			}

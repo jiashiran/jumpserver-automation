@@ -49,7 +49,14 @@ func Service() {
 			log.Logger.Info(ws.ID)
 			log.Logger.Info("get task", id)
 			m := store.Select(id)
-			context.Write([]byte(m))
+			args := store.SelectArgs(id)
+			result := make(map[string]string)
+			result["Id"] = id
+			result["Task"] = m
+			result["Args"] = args
+			bs, err := json.Marshal(result)
+			util.CheckErr(err, "json.Marshal error:")
+			context.Write(bs)
 		} else {
 			context.Write([]byte("no login"))
 		}
@@ -60,6 +67,7 @@ func Service() {
 		uri := context.Request().RequestURI
 		params := param(uri)
 		id := params["id"]
+
 		sessionId := params["sessionId"]
 		wsSesion, ok := cons.Load(sessionId)
 		if ok {
@@ -67,6 +75,16 @@ func Service() {
 			log.Logger.Info(ws.ID)
 			log.Logger.Info("execute task :", id)
 			m := store.Select(id)
+			args := store.SelectArgs(id)
+			if args != "" {
+				argsArray := strings.Split(args, ";")
+				for _, arg := range argsArray {
+					kv := strings.Split(arg, ":")
+					if len(kv) == 2 && kv[0] != "" && kv[1] != "" {
+						m = strings.ReplaceAll(m, "${"+kv[0]+"}", kv[1])
+					}
+				}
+			}
 			util.Execute(ws, m)
 			context.Write([]byte("执行成功"))
 		} else {
@@ -78,6 +96,7 @@ func Service() {
 		uri := context.Request().RequestURI
 		params := param(uri)
 		id := params["id"]
+		args := params["args"]
 		sessionId := params["sessionId"]
 		wsSesion, ok := cons.Load(sessionId)
 		if ok {
@@ -90,6 +109,7 @@ func Service() {
 				context.Write([]byte(err.Error()))
 			} else {
 				store.Update(id, string(body))
+				store.UpdateArgs(id, args)
 				context.Write(body)
 			}
 		} else {
@@ -109,6 +129,7 @@ func Service() {
 			log.Logger.Info(ws.ID)
 			log.Logger.Info("delete task :", id)
 			store.Delete(id)
+			store.DeleteArgs(id)
 			context.Write([]byte(id + " deleted ok"))
 		} else {
 			context.Write([]byte("no login"))

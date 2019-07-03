@@ -10,6 +10,8 @@
     <button id="mfaButton" onclick="mfalogin()">输入MFA</button>
     </span>
     &nbsp
+    <br/>
+    参数：<input id="args" type="text" size="70">
     <button onclick="execute()">执行</button>
     <button onclick="stopExecute()">停止</button>
     <a href="/help" target="_blank" ><input type="button" style="color: darkred" value="任务命令说明"></a>
@@ -105,10 +107,10 @@
             if (xhr.readyState == 4) {
                 if (xhr.status = 200) {
                     var data = JSON.parse(xhr.responseText); //json解析方法JSON.parse 或者 eval('('+xhr.responseText+')')
-                    document.getElementById("all_task").innerHTML = "<option>select</option>";
+                    document.getElementById("all_task").innerHTML = "<option value='select'>select</option>";
                     for (var o in data){
                         console.log(o,data[o]);
-                        document.getElementById("all_task").innerHTML += '<option>'+o+'</option>'
+                        document.getElementById("all_task").innerHTML += '<option value="'+o+'">'+o+'</option>'
                     }
                 }
             }
@@ -121,8 +123,16 @@
         xhr.onreadystatechange = function () {
             if (xhr.readyState == 4) {
                 if (xhr.status = 200) {
-                    console.log(xhr.responseText);
-                    document.getElementById("task").value=xhr.responseText;
+                    if("no login" != xhr.responseText){
+                        console.log(xhr.responseText);
+                        var obj = JSON.parse(xhr.responseText);
+                        document.getElementById("task").value=obj.Task;
+                        document.getElementById("args").value=obj.Args;
+                        set_select(obj.Id);
+                    }else {
+                        document.getElementById("task").value=xhr.responseText;
+                    }
+
                 }
             }
         }
@@ -134,7 +144,10 @@
         var index = obj.selectedIndex; // 选中索引
         var text = obj.options[index].text; // 选中文本
         var xhr = new XMLHttpRequest();
-        xhr.open('POST', '/task/update?id='+text+"&sessionId="+document.getElementById("sessionId").value);
+        var args = text+"&sessionId="+document.getElementById("sessionId").value
+
+            +"&args="+document.getElementById("args").value;
+        xhr.open('POST', '/task/update?id='+args);
         xhr.setRequestHeader("Content-type","application/text");
         xhr.send(task);
         xhr.onreadystatechange = function () {
@@ -143,6 +156,7 @@
                     console.log(xhr.responseText);
                     document.getElementById("task").value=xhr.responseText;
                     loadTasks();
+                    getTask(text)
                 }
             }
         }
@@ -153,7 +167,9 @@
         var text = document.getElementById("taskName").value; // 选中文本
         console.log(text);
         var xhr = new XMLHttpRequest();
-        xhr.open('POST', '/task/update?id='+text+"&sessionId="+document.getElementById("sessionId").value);
+        var args = text+"&sessionId="+document.getElementById("sessionId").value
+            +"&args="+document.getElementById("args").value;
+        xhr.open('POST', '/task/update?id='+args);
         xhr.setRequestHeader("Content-type","application/text");
         xhr.send(task);
         xhr.onreadystatechange = function () {
@@ -190,7 +206,10 @@
         var index = obj.selectedIndex; // 选中索引
         var id = obj.options[index].text; // 选中文本
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/task/execute?id=' + id+"&sessionId="+document.getElementById("sessionId").value);
+        var param = id+"&sessionId="+document.getElementById("sessionId").value
+            + "&args="+document.getElementById("args").value;
+        console.log(param);
+        xhr.open('GET', '/task/execute?id=' + param);
         xhr.send();
         xhr.onreadystatechange = function () {
             if (xhr.readyState == 4) {
@@ -212,6 +231,19 @@
                 }
             }
         }
+    }
+
+    function set_select(value){
+          m=$("all_task");
+          for(i=0;i<=m.options.length;i++) {
+               if(m.options[i].value == value) {
+                    m.options[i].selected=true;
+                    break;
+               }
+          }
+    }
+    function $(id){
+          return document.getElementById(id);
     }
 
 </script>

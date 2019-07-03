@@ -9,9 +9,10 @@ import (
 )
 
 var (
-	db     *bolt.DB
-	DB     = "store.db"
-	Bucket = []byte("StoreBucket")
+	db         *bolt.DB
+	DB         = "store.db"
+	Bucket     = []byte("StoreBucket")
+	ArgsBucket = []byte("ArgsStoreBucket")
 )
 
 func init() {
@@ -29,6 +30,15 @@ func init() {
 func Update(key string, value string) {
 	db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists(Bucket)
+		err = b.Put([]byte(key), []byte(value))
+		return err
+	})
+	db.Sync()
+}
+
+func UpdateArgs(key string, value string) {
+	db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists(ArgsBucket)
 		err = b.Put([]byte(key), []byte(value))
 		return err
 	})
@@ -56,10 +66,46 @@ func Select(key string) string {
 	return string(bd)
 }
 
+func SelectArgs(key string) string {
+	var bd []byte
+	db.Update(func(tx *bolt.Tx) error {
+		var e error
+		defer func() {
+			if err := recover(); err != nil {
+				e = errors.New(fmt.Sprint(err))
+			}
+		}()
+		b, err := tx.CreateBucketIfNotExists(ArgsBucket)
+		if err != nil {
+			log.Logger.Error("Select error:", err)
+			return err
+		}
+		bd = b.Get([]byte(key))
+		return e
+	})
+	db.Sync()
+	return string(bd)
+}
+
 func Delete(key string) error {
 	var e error
 	db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists(Bucket)
+		if err != nil {
+			log.Logger.Error("Delete error:", err)
+			return err
+		}
+		err = b.Delete([]byte(key))
+		e = err
+		return e
+	})
+	return e
+}
+
+func DeleteArgs(key string) error {
+	var e error
+	db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists(ArgsBucket)
 		if err != nil {
 			log.Logger.Error("Delete error:", err)
 			return err

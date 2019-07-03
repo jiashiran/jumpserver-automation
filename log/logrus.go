@@ -16,7 +16,7 @@ func init() {
 	f, _ := os.OpenFile("logrus.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
 	_ = f
 
-	Logger.SetOutput(f)
+	Logger.SetOutput(os.Stdout)
 
 	// Only log the warning severity or above.
 	Logger.SetLevel(logrus.InfoLevel)
