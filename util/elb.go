@@ -21,12 +21,12 @@ var (
 	AWS_TYPE     = "aws"
 	ALIYUN_TYPE  = "aliyun"
 	yunConfig    = YunConfig{
-		AwsRegion:          "",
-		AwsAccessKey:       "",
-		AwsAecretAccessKey: "",
+		AwsRegion:          " ",
+		AwsAccessKey:       " ",
+		AwsAecretAccessKey: " ",
 
-		AliyunRegion:          "",
-		AliyunAccessKey:       "",
+		AliyunRegion:          " ",
+		AliyunAccessKey:       " ",
 		AliyunAecretAccessKey: "",
 	}
 )

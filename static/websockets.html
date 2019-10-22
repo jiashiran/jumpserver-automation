@@ -1,34 +1,81 @@
 <div id="tasks">
-    <select id="all_task" onchange="getTask(this.options[this.options.selectedIndex].value)"><option>select</option></select>
-    <button onclick="updateTask()">更新</button><button onclick="del()">删除</button>
-    &nbsp
-    <span id="loginDiv">
-    Jumpserver Username：<input id="user" type="text" />
-    Password：<input id="password" type="password" />
-    <button id="loginButton" onclick="login()">登录</button>
-    <input id="mfa" type="text" />
-    <button id="mfaButton" onclick="mfalogin()">输入MFA</button>
+    <label style="color: red;font-family: 'Arial Hebrew Scholar'">环境：</label><select id="select_type" onchange="showhidediv(this.options[this.options.selectedIndex].value)"><option>product</option><option>test or dev</option></select>
+    <hr/>
+    <div id="loginDiv" style="float: left">
+        &nbsp;&nbsp;Jumpserver：<select id="select_jumpserver"><option>Cticloud</option><option>Clink</option></select>
+        &nbsp;&nbsp;Jumpserver Username：<input id="user" type="text"  autocomplete="on"/>
+        &nbsp;&nbsp;Password：<input id="password" type="password" />
+        <button id="loginButton" onclick="login()" >登录</button>
+        <input id="mfa" type="text" />
+        <button id="mfaButton" onclick="mfalogin()">输入MFA</button>
+    </div>
+    <div id="add_server" style="float: left;display: none">
+        &nbsp;&nbsp;ssh server name：<input id="serverName" type="text"  autocomplete="on"/>
+        ssh ip：<input id="serverIp" type="text"  autocomplete="on"/>
+        port：<input id="serverPort" type="text" size="5" autocomplete="on" value="22"/>
+        user：<input id="serverUser" type="text" size="10"  autocomplete="on" value="root"/>
+        password：<input id="serverPassword" type="password"  autocomplete="on"/> or
+        key：<select id="ssh_keys"></select>
+        <button id="add_ssh_server" onclick="add_ssh_server()" >添加server</button>
+        <button id="delete_ssh_server" onclick="delete_ssh_server()" >删除server</button>
+    </div>
+    </br>
+    <hr/>
+    <div id="product_tasks" >
+        &nbsp;&nbsp;
+        任务组：<select id="all_taskGroup" onchange="loadTasks(this.options[this.options.selectedIndex].value)"></select>
+        任务名：<select id="all_task" onchange="getTask(this.options[this.options.selectedIndex].value)"><option>select</option></select>
+        &nbsp;&nbsp;&nbsp;&nbsp;
+        <button onclick="updateTask()" style="color: chocolate">更新</button>
+        &nbsp;&nbsp;&nbsp;&nbsp;
+        <button onclick="del()" style="color: red">删除</button>
+        &nbsp;&nbsp;&nbsp;&nbsp;
+        <button onclick="execute()" style="color: chartreuse">执行</button>
+        &nbsp;&nbsp;&nbsp;&nbsp;
+        <button onclick="stopExecute()" style="color: black;">停止</button>
+        &nbsp;&nbsp;&nbsp;&nbsp;
+        <a href="/help" target="_blank" ><input type="button" style="color: darkred;font-size: 35px" value="任务命令说明"></a>
+    </div>
+    <div id="test_tasks" style="display: none">
+        &nbsp;&nbsp;
+        任务组：<select id="all_test_taskGroup" onchange="loadTestTasks(this.options[this.options.selectedIndex].value)"></select>
+        任务名：<select id="all_test_task" onchange="getTestTask(this.options[this.options.selectedIndex].value)"><option>select</option></select>
+        &nbsp;&nbsp;&nbsp;&nbsp;
+        <button onclick="test_updateTask()" style="color: chocolate">更新</button>
+        &nbsp;&nbsp;&nbsp;&nbsp;
+        <button onclick="test_del()" style="color: red">删除</button>
+        &nbsp;&nbsp;&nbsp;&nbsp;
+        <button onclick="test_execute()" style="color: chartreuse">执行</button>
+    </div>
+    <hr/>
+    &nbsp;&nbsp;
+    <span id="new_product_job" style="float: left">
+        &nbsp;&nbsp;
+        新建任务组：<input id="taskGroupName" type="text" />
+        新建任务名：<input id="taskName" type="text" />
+        任务参数：<input id="args" type="text" size="35">
+    <button onclick="save()" style="color: chocolate">新建任务</button>&nbsp;&nbsp;&nbsp;&nbsp;
     </span>
-    &nbsp
-    <br/>
-    参数：<input id="args" type="text" size="70">
-    <button onclick="execute()">执行</button>
-    <button onclick="stopExecute()">停止</button>
-    <a href="/help" target="_blank" ><input type="button" style="color: darkred" value="任务命令说明"></a>
-    <br/>
-    新建任务名：<input id="taskName" type="text" /><button onclick="save()">新建任务</button>
-    <button onclick="clearOutput()">清空输出</button>&nbsp<label style="color: red" id="jumpServerStatus"></label>
-    <br/>
+    <span id="new_test_job" style="float: left;display: none">
+        &nbsp;&nbsp;
+        新建任务组：<input id="test_taskGroupName" type="text" />
+        新建任务名：<input id="test_taskName" type="text" />
+        <input type="hidden" id="test_args" type="text" size="35">
+        server:<select id="ssh_servers" ><option>select</option></select>
+    <button onclick="test_save()" style="color: chocolate">新建任务</button>&nbsp;&nbsp;&nbsp;&nbsp;
+    </span>
+    <button onclick="clearOutput()" style="color: blueviolet">清空输出</button>&nbsp<label style="color: red" id="jumpServerStatus"></label>
+    <hr/>
     <textarea id="task" style="overflow:auto; height: 100px; width: 100%; border: 1px solid #999;"></textarea>
 </div>
 <input type="hidden" id="sessionId"/>
+<input type="hidden" id="testSessionId"/>
 <hr/>
 <hr/>
 <!-- the messages will be shown here -->
 <div  id="scrolldIV" style="overflow:auto; height: 500px; width: 100%; border: 1px solid #999; color: red">
     <b><pre id="output" ></pre></b>
 </div>
-
 <!-- import the iris client-side library for browser-->
 <script src="/iris-ws.js"></script>
 
@@ -37,26 +84,21 @@
     var port = document.location.port ? (":" + document.location.port) : "";
     // see app.Get("/echo", ws.Handler()) on main.go
     var wsURL = scheme + "://" + document.location.hostname + port+"/echo";
-
     var output = document.getElementById("output");
-
     // Ws comes from the auto-served '/iris-ws.js'
-    var socket = new Ws(wsURL)
+    var socket = new Ws(wsURL);
     socket.OnConnect(function () {
         output.innerHTML += "Status: Connected\n";
         //document.getElementById("wsbSocketStatus").innerText = "Status: Connected\n"
     });
-
     socket.OnDisconnect(function () {
         output.innerHTML += "Status: Disconnected\n";
     });
-
     // read events from the server
     socket.On("chat", function (msg) {
+        console.log(msg);
         addMessage(msg);
     });
-
-
     function addMessage(msg) {
         if(msg.indexOf("WebSocketId:") != -1){
             msg = msg.replace("WebSocketId:","");
@@ -66,8 +108,14 @@
             document.getElementById("jumpServerStatus").innerText = "JumpServer已登陆";
             return
         }
+        if(msg.indexOf("test-test-test:") != -1){
+            msg = msg.replace("test-test-test:","");
+            console.log(msg);
+            document.getElementById("testSessionId").value = msg;
+        }
+
         output.innerHTML += msg + "\n";
-        add()
+        add();
         if(msg.indexOf("[MFA auth]:") != -1){
             document.getElementById("mfa").value = msg
         }
@@ -83,10 +131,13 @@
     }
 
     function login() {
+        var jumpserverobj = document.getElementById("select_jumpserver");
+        var jumpserverindex = jumpserverobj.selectedIndex;
+        jumpserver = jumpserverobj.options[jumpserverindex].text;
         user = document.getElementById("user").value;
         password = document.getElementById("password").value;
-        //console.log(user,password)
-        socket.Emit("chat", "jump|"+user+"|"+password);
+        //console.log(user,password,jumpserver);
+        socket.Emit("chat", "jump|"+user+"|"+password+"|"+jumpserver);
     }
 
     function mfalogin() {
@@ -95,30 +146,72 @@
 
     window.onload=function (){
 
-        loadTasks();
-
+        loadTaskGroups();
+        loadSSHKeys();
+        loadSSHServers();
+        loadAll_test_taskGroup();
+        setTimeout(function () {
+            socket.Emit("chat", "test-test-test");
+        }, 1000);
     };
 
-    function loadTasks() {
+    function loadTaskGroups() {
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/tasks/list');
+        xhr.open('GET', '/taskGroups/list');
         xhr.send();
         xhr.onreadystatechange = function () {
             if (xhr.readyState == 4) {
                 if (xhr.status = 200) {
                     var data = JSON.parse(xhr.responseText); //json解析方法JSON.parse 或者 eval('('+xhr.responseText+')')
-                    document.getElementById("all_task").innerHTML = "<option value='select'>select</option>";
+                    document.getElementById("all_taskGroup").innerHTML = "";
+                    var group = "";
                     for (var o in data){
+                        if(group == ""){
+                            group = o;
+                        }
                         console.log(o,data[o]);
-                        document.getElementById("all_task").innerHTML += '<option value="'+o+'">'+o+'</option>'
+                        document.getElementById("all_taskGroup").innerHTML += '<option value="'+o+'">'+o+'</option>'
+                    }
+                    if(group != ""){
+                        loadTasks(group)
                     }
                 }
             }
         }
     }
-    function getTask(id) {
+
+
+
+    function loadTasks(group) {
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/task?id='+id+"&sessionId="+document.getElementById("sessionId").value);
+        xhr.open('GET', '/tasks/list?group='+group);
+        xhr.send();
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    var data = JSON.parse(xhr.responseText); //json解析方法JSON.parse 或者 eval('('+xhr.responseText+')')
+                    document.getElementById("all_task").innerHTML = "";
+                    var id = "";
+                    for (var o in data){
+                        if(id == ""){
+                            id = o
+                        }
+                        console.log(o,data[o]);
+                        document.getElementById("all_task").innerHTML += '<option value="'+o+'">'+o+'</option>'
+                    }
+                    if(id != ""){
+                        getTask(id)
+                    }
+                }
+            }
+        }
+    }
+
+    function getTask(id) {
+        var group = getGroup();
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/task?id='+id+"&sessionId="+document.getElementById("sessionId").value+"&group="+group);
         xhr.send();
         xhr.onreadystatechange = function () {
             if (xhr.readyState == 4) {
@@ -139,12 +232,14 @@
     }
 
     function updateTask() {
+        var group = getGroup();
+
         var task =  document.getElementById("task").value;
         var obj = document.getElementById("all_task");
         var index = obj.selectedIndex; // 选中索引
         var text = obj.options[index].text; // 选中文本
         var xhr = new XMLHttpRequest();
-        var args = text+"&sessionId="+document.getElementById("sessionId").value
+        var args = text+"&sessionId="+document.getElementById("sessionId").value+"&group="+group
 
             +"&args="+document.getElementById("args").value;
         xhr.open('POST', '/task/update?id='+args);
@@ -155,8 +250,10 @@
                 if (xhr.status = 200) {
                     console.log(xhr.responseText);
                     document.getElementById("task").value=xhr.responseText;
-                    loadTasks();
-                    getTask(text)
+                    loadTaskGroups();
+                    loadTasks(group);
+                    getTask(text);
+                    set_group_select(group)
                 }
             }
         }
@@ -165,11 +262,15 @@
     function save() {
         var task =  document.getElementById("task").value;
         var text = document.getElementById("taskName").value; // 选中文本
+        var group = document.getElementById("taskGroupName").value; // 选中文本
+        if(group == ""){
+            group = getGroup()
+        }
         console.log(text);
         var xhr = new XMLHttpRequest();
         var args = text+"&sessionId="+document.getElementById("sessionId").value
             +"&args="+document.getElementById("args").value;
-        xhr.open('POST', '/task/update?id='+args);
+        xhr.open('POST', '/task/update?id='+args+"&group="+group);
         xhr.setRequestHeader("Content-type","application/text");
         xhr.send(task);
         xhr.onreadystatechange = function () {
@@ -177,25 +278,31 @@
                 if (xhr.status = 200) {
                     console.log(xhr.responseText);
                     document.getElementById("task").value=xhr.responseText;
-                    loadTasks();
+
+                    loadTaskGroups();
+                    loadTasks(group);
+                    getTask(text);
+                    set_group_select(group)
                 }
             }
         }
     }
 
     function del() {
+        var group = getGroup();
+
         var obj = document.getElementById("all_task");
         var index = obj.selectedIndex; // 选中索引
         var id = obj.options[index].text; // 选中文本
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/task/delete?id='+id+"&sessionId="+document.getElementById("sessionId").value);
+        xhr.open('GET', '/task/delete?id='+id+"&sessionId="+document.getElementById("sessionId").value)+"&group="+group;
         xhr.send();
         xhr.onreadystatechange = function () {
             if (xhr.readyState == 4) {
                 if (xhr.status = 200) {
                     console.log(xhr.responseText);
-                    loadTasks();
-                    loadTasks();
+                    loadTaskGroups();
+                    loadTasks(group)
                 }
             }
         }
@@ -209,7 +316,7 @@
         var param = id+"&sessionId="+document.getElementById("sessionId").value
             + "&args="+document.getElementById("args").value;
         console.log(param);
-        xhr.open('GET', '/task/execute?id=' + param);
+        xhr.open('GET', '/task/execute?id=' + param+"&group="+getGroup());
         xhr.send();
         xhr.onreadystatechange = function () {
             if (xhr.readyState == 4) {
@@ -242,8 +349,303 @@
                }
           }
     }
+
+    function set_group_select(value){
+        m=$("all_taskGroup");
+        for(i=0;i<=m.options.length;i++) {
+            if(m.options[i].value == value) {
+                m.options[i].selected=true;
+                break;
+            }
+        }
+    }
+
     function $(id){
           return document.getElementById(id);
+    }
+
+    function getGroup() {
+        var groupobj = document.getElementById("all_taskGroup");
+        var groupindex = groupobj.selectedIndex;
+        var group = groupobj.options[groupindex].text;
+        return group
+    }
+//-----------------------------------------------------------------------------------------------------------------------
+
+    function loadAll_test_taskGroup() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/listTestTaskGroup');
+        xhr.send();
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    var data = JSON.parse(xhr.responseText); //json解析方法JSON.parse 或者 eval('('+xhr.responseText+')')
+                    document.getElementById("all_test_taskGroup").innerHTML = "";
+                    var group = "";
+                    for (var o in data){
+                        if(group == ""){
+                            group = o;
+                        }
+                        console.log(o,data[o]);
+                        document.getElementById("all_test_taskGroup").innerHTML += '<option value="'+o+'">'+o+'</option>'
+                    }
+                    if(group != ""){
+                        loadTestTasks(group)
+                    }
+                }
+            }
+        }
+    }
+
+    function loadTestTasks(group) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/listTestTask?group='+group);
+        xhr.send();
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    var data = JSON.parse(xhr.responseText); //json解析方法JSON.parse 或者 eval('('+xhr.responseText+')')
+                    document.getElementById("all_test_task").innerHTML = "";
+                    var id = "";
+                    for (var o in data){
+                        if(id == ""){
+                            id = o
+                        }
+                        console.log(o,data[o]);
+                        document.getElementById("all_test_task").innerHTML += '<option value="'+o+'">'+o+'</option>'
+                    }
+                    if(id != ""){
+                        getTestTask(id)
+                    }
+                }
+            }
+        }
+    }
+
+    function getTestTask(id) {
+        var group = getTestGroup();
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/testTask?name='+id+"&sessionId="+document.getElementById("sessionId").value+"&group="+group);
+        xhr.send();
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    if("no login" != xhr.responseText){
+                        console.log(xhr.responseText);
+                        var obj = JSON.parse(xhr.responseText);
+                        document.getElementById("task").value=obj.Task;
+                        document.getElementById("test_args").value=obj.Args;
+                    }else {
+                        document.getElementById("task").value=xhr.responseText;
+                    }
+
+                }
+            }
+        }
+    }
+
+    function loadSSHKeys() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/sshKeys');
+        xhr.send();
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    var data = JSON.parse(xhr.responseText); //json解析方法JSON.parse 或者 eval('('+xhr.responseText+')')
+                    document.getElementById("ssh_keys").innerHTML = "";
+                    for (var o in data){
+                        console.log(o,data[o]);
+                        document.getElementById("ssh_keys").innerHTML += '<option value="'+o+'">'+o+'</option>'
+                    }
+                }
+            }
+        }
+    }
+
+    function loadSSHServers() {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/listShhServer');
+        xhr.send();
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    var data = JSON.parse(xhr.responseText); //json解析方法JSON.parse 或者 eval('('+xhr.responseText+')')
+                    document.getElementById("ssh_servers").innerHTML = "";
+                    for (var o in data){
+                        console.log(o,data[o]);
+                        document.getElementById("ssh_servers").innerHTML += '<option value="'+data[o]+'">'+o+'</option>'
+                    }
+                }
+            }
+        }
+    }
+
+    function getTestGroup() {
+        var groupobj = document.getElementById("all_test_taskGroup");
+        var groupindex = groupobj.selectedIndex;
+        var group = groupobj.options[groupindex].text;
+        return group
+    }
+
+    function showhidediv(v){
+        //console.log(v);
+        if(v != "product"){
+            document.getElementById("loginDiv").style.display='none';
+            document.getElementById("new_product_job").style.display='none';
+            document.getElementById("product_tasks").style.display='none';
+
+            document.getElementById("add_server").style.display='block';
+            document.getElementById("add_server").style.float="left";
+            document.getElementById("new_test_job").style.display='block';
+            document.getElementById("new_test_job").style.float="left";
+            document.getElementById("test_tasks").style.display='block';
+            loadAll_test_taskGroup();
+            //document.getElementById("test_tasks").style.float="left";
+        } else {
+            document.getElementById("add_server").style.display='none';
+            document.getElementById("new_test_job").style.display='none';
+            document.getElementById("test_tasks").style.display='none';
+
+            document.getElementById("loginDiv").style.display='block';
+            document.getElementById("new_product_job").style.display='block';
+            document.getElementById("product_tasks").style.display='block';
+            loadTaskGroups();
+        }
+    }
+
+    function add_ssh_server() {
+        var name = document.getElementById("serverName").value;
+        var ip = document.getElementById("serverIp").value;
+        var port = document.getElementById("serverPort").value;
+        var user = document.getElementById("serverUser").value;
+        var password = document.getElementById("serverPassword").value;
+        var obj = document.getElementById("ssh_keys");
+        var index = obj.selectedIndex;
+        var key = obj.options[index].text;
+        console.log(name,ip,port,password,key);
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/addShhServer?name='+name+"&ip="+ip+"&port="+port+"&password="+password+"&key="+key+"&user="+user);
+        xhr.send();
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    if(xhr.responseText == "param error"){
+                        return
+                    }
+                    loadSSHServers();
+                }
+            }
+        }
+    }
+
+    function delete_ssh_server() {
+        var name = document.getElementById("serverName").value;
+        var ip = document.getElementById("serverIp").value;
+        console.log(name,ip);
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/deleteShhServer?name='+name+"&ip="+ip);
+        xhr.send();
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    console.log(xhr.responseText);
+                    if(xhr.responseText == "param error"){
+                        return
+                    }
+                    loadSSHServers();
+                }
+            }
+        }
+    }
+
+    function test_save() {
+        var task =  document.getElementById("task").value;
+        var group = document.getElementById("test_taskGroupName").value;
+        var name = document.getElementById("test_taskName").value;
+        var args = ""//document.getElementById("test_args").value;
+
+        var obj = document.getElementById("ssh_servers");
+        var index = obj.selectedIndex;
+        var server = obj.options[index].value;
+        console.log(server,group,name,args);
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/addTestTask?name='+name+"&args="+args+"&group="+group+"&server="+server+"&sessionId="+document.getElementById("sessionId").value);
+        xhr.setRequestHeader("Content-type","application/text");
+        xhr.send(task);
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    console.log(xhr.responseText);
+                    document.getElementById("task").value=xhr.responseText;
+                    loadAll_test_taskGroup();
+                }
+            }
+        }
+    }
+
+    function test_updateTask() {
+        var obj = document.getElementById("all_test_task");
+        var index = obj.selectedIndex;
+        var name = obj.options[index].text;
+        var group = getTestGroup();
+        var task =  document.getElementById("task").value;
+
+        console.log(group,name);
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/updateTestTask?name='+name+"&group="+group+"&sessionId="+document.getElementById("sessionId").value);
+        xhr.setRequestHeader("Content-type","application/text");
+        xhr.send(task);
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    console.log(xhr.responseText);
+                    document.getElementById("task").value=xhr.responseText;
+                    loadAll_test_taskGroup();
+                }
+            }
+        }
+    }
+
+    function test_del() {
+        var group = getTestGroup();
+        var obj = document.getElementById("all_test_task");
+        var index = obj.selectedIndex; // 选中索引
+        var name = obj.options[index].text;
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', '/deleteTestTask?name='+name+"&group="+group);
+        xhr.send();
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    console.log(xhr.responseText);
+                    if(xhr.responseText == "param error"){
+                        return
+                    }
+                    loadAll_test_taskGroup();
+                }
+            }
+        }
+    }
+
+    function test_execute() {
+        var obj = document.getElementById("all_test_task");
+        var index = obj.selectedIndex; // 选中索引
+        var id = obj.options[index].text; // 选中文本
+        var xhr = new XMLHttpRequest();
+        var param = id+"&sessionId="+document.getElementById("testSessionId").value
+            + "&args="+document.getElementById("args").value;
+        console.log(param);
+        xhr.open('GET', '/runTestTask?name=' + param+"&group="+getTestGroup());
+        xhr.send();
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4) {
+                if (xhr.status = 200) {
+                    alert(xhr.responseText);
+                }
+            }
+        }
     }
 
 </script>

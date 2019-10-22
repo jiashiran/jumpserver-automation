@@ -26,15 +26,38 @@ func Service() {
 	app := iris.New()
 	app.Use(iris_recover.New())
 	app.Get("/", func(ctx iris.Context) {
-		ctx.ServeFile("static/websockets.html", false) // second parameter: enable gzip?
+		ctx.ServeFile("static/websockets.html", true) // second parameter: enable gzip?
 	})
 	app.Get("/help", func(ctx iris.Context) {
 		ctx.ServeFile("static/help.html", true) // second parameter: enable gzip?
 	})
 
+	app.Get("/taskGroups/list", func(context context.Context) {
+		m := store.SelectAll()
+		newM := make(map[string]string, 0)
+
+		for k, _ := range m {
+			values := getJobGroupAndJobName(k)
+			newM[values[0]] = values[1]
+		}
+
+		b, _ := json.Marshal(newM)
+		context.Write(b)
+	})
+
 	app.Get("/tasks/list", func(context context.Context) {
 		m := store.SelectAll()
-		b, _ := json.Marshal(m)
+		newM := make(map[string]string, 0)
+		params := param(context.Request().RequestURI)
+		group := params["group"]
+		log.Logger.Info("group:", group)
+		for k, v := range m {
+			if strings.Contains(k, "JOB_GROUP《"+group) {
+				values := getJobGroupAndJobName(k)
+				newM[values[1]] = v
+			}
+		}
+		b, _ := json.Marshal(newM)
 		context.Write(b)
 	})
 
@@ -42,14 +65,14 @@ func Service() {
 		uri := context.Request().RequestURI
 		params := param(uri)
 		id := params["id"]
+		group := params["group"]
 		sessionId := params["sessionId"]
 		wsSesion, ok := cons.Load(sessionId)
 		if ok {
 			ws := wsSesion.(*session.WsSesion)
-			log.Logger.Info(ws.ID)
-			log.Logger.Info("get task", id)
-			m := store.Select(id)
-			args := store.SelectArgs(id)
+			log.Logger.Info("get task", id, group, ws.ID)
+			m := store.Select(buildJobFullName(group, id))
+			args := store.SelectArgs(buildJobArgsFullName(group, id))
 			result := make(map[string]string)
 			result["Id"] = id
 			result["Task"] = m
@@ -67,15 +90,15 @@ func Service() {
 		uri := context.Request().RequestURI
 		params := param(uri)
 		id := params["id"]
-
+		group := params["group"]
 		sessionId := params["sessionId"]
 		wsSesion, ok := cons.Load(sessionId)
 		if ok {
 			ws := wsSesion.(*session.WsSesion)
 			log.Logger.Info(ws.ID)
 			log.Logger.Info("execute task :", id)
-			m := store.Select(id)
-			args := store.SelectArgs(id)
+			m := store.Select(buildJobFullName(group, id))
+			args := store.SelectArgs(buildJobArgsFullName(group, id))
 			if args != "" {
 				argsArray := strings.Split(args, ";")
 				for _, arg := range argsArray {
@@ -96,6 +119,7 @@ func Service() {
 		uri := context.Request().RequestURI
 		params := param(uri)
 		id := params["id"]
+		group := params["group"]
 		args := params["args"]
 		sessionId := params["sessionId"]
 		wsSesion, ok := cons.Load(sessionId)
@@ -108,8 +132,8 @@ func Service() {
 				log.Logger.Error(err)
 				context.Write([]byte(err.Error()))
 			} else {
-				store.Update(id, string(body))
-				store.UpdateArgs(id, args)
+				store.Update(buildJobFullName(group, id), string(body))
+				store.UpdateArgs(buildJobArgsFullName(group, id), args)
 				context.Write(body)
 			}
 		} else {
@@ -122,14 +146,15 @@ func Service() {
 		uri := context.Request().RequestURI
 		params := param(uri)
 		id := params["id"]
+		group := params["group"]
 		sessionId := params["sessionId"]
 		wsSesion, ok := cons.Load(sessionId)
 		if ok {
 			ws := wsSesion.(*session.WsSesion)
 			log.Logger.Info(ws.ID)
 			log.Logger.Info("delete task :", id)
-			store.Delete(id)
-			store.DeleteArgs(id)
+			store.Delete(buildJobFullName(group, id))
+			store.DeleteArgs(buildJobArgsFullName(group, id))
 			context.Write([]byte(id + " deleted ok"))
 		} else {
 			context.Write([]byte("no login"))
@@ -155,9 +180,8 @@ func Service() {
 			context.Write([]byte("no login"))
 		}
 	})
-
+	AddTestFunction(app)
 	setupWebsocket(app)
-
 	// x2
 	// http://localhost:8080
 	// http://localhost:8080
@@ -166,6 +190,21 @@ func Service() {
 	defer func() {
 		store.Close()
 	}()
+}
+
+func buildJobFullName(jobGroup, jobName string) string {
+	return "JOB_GROUP《" + jobGroup + "》JOB_NAME《" + jobName + "》_END"
+}
+
+func getJobGroupAndJobName(key string) []string {
+	key = strings.Replace(key, "JOB_GROUP《", "", -1)
+	key = strings.Replace(key, "》_END", "", -1)
+	values := strings.Split(key, "》JOB_NAME《")
+	return values
+}
+
+func buildJobArgsFullName(jobGroup, jobName string) string {
+	return "JOB_GROUP《" + jobGroup + "》JOB_NAME《" + jobName + "》_ARGS_END"
 }
 
 func setupWebsocket(app *iris.Application) {
@@ -197,17 +236,29 @@ func handleConnection(c websocket.Connection) {
 			wsSesion = &session.WsSesion{ID: c.ID(), OUT: make(chan string, 500), IN: make(chan string), LoginServer: &loginServer}
 			cons.Store(c.ID(), wsSesion)
 			ws = wsSesion.(*session.WsSesion)
+			ws.C = c
 			log.Logger.Info("create new session:", c.ID())
 		} else {
 			ws = wsSesion.(*session.WsSesion)
 			log.Logger.Info(ws.ID, msg)
 		}
+		if strings.Contains(msg, "test-test-test") {
+			log.Logger.Info("ttt-eee-sss-ttt")
+			c.Emit("chat", "test-test-test:"+c.ID())
+		}
 
 		if strings.Contains(msg, "jump") {
+			msg = strings.ReplaceAll(msg, "\n", "")
 			ms := strings.Split(msg, "|")
 			go func() {
 				ws.C = c
-				client, jumpserverSession := util.Jump(ms[1], ms[2], "", 0, c, ws)
+				jumpserverIp := "1"
+				jumpserverPort := 22
+				if len(ms) > 3 && ms[3] == "" {
+					jumpserverIp = "2"
+					jumpserverPort = 22
+				}
+				client, jumpserverSession := util.Jump(ms[1], ms[2], jumpserverIp, jumpserverPort, c, ws)
 				if client == nil {
 					log.Logger.Error("logon fail")
 					return
@@ -223,6 +274,7 @@ func handleConnection(c websocket.Connection) {
 		} else if strings.Contains(msg, "[MFA auth]: ") {
 			ws.IN <- strings.Replace(msg, "[MFA auth]: ", "", -1)
 		}
+
 		// Write message back to the client message owner with:
 
 		// Write message to all except this client with:

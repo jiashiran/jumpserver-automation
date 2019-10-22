@@ -1,14 +1,11 @@
 package util
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"github.com/kataras/iris/websocket"
-	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
-	"io"
 	"jumpserver-automation/log"
 	"jumpserver-automation/session"
 	"net"
@@ -104,7 +101,6 @@ func Execute(wsSesion *session.WsSesion, task string) {
 			wsSesion.Session.SendCommand(strings.ReplaceAll(m, "SHELL", ""))
 
 		} else if ms[0] == "LB" {
-
 			ok, msg := OperatLb(m)
 			if !ok {
 				wsSesion.OUT <- msg
@@ -136,6 +132,39 @@ func Execute(wsSesion *session.WsSesion, task string) {
 		}
 	}
 OUT:
+}
+
+func ExecuteWithServer(wsSesion *session.WsSesion, task string, server SSHServer) {
+	client, err := GetSSHClient(&server.Config)
+	if err != nil {
+		log.Logger.Error(err)
+	}
+	defer client.Close()
+	commands := strings.Split(task, "\n")
+	for i, m := range commands {
+		m = delete_extra_space(m)
+		log.Logger.Info(i, m)
+		if strings.Contains(m, "//") {
+			continue
+		}
+		ms := strings.Split(m, " ")
+		for i, m := range ms {
+			ms[i] = strings.Replace(m, " ", "", -1)
+		}
+		if ms[0] == "SHELL" {
+			log.Logger.Info("shell")
+			//wsSesion.Session.SendCommand(strings.ReplaceAll(m, "SHELL", ""))
+			ExecuteShellWithChan(client, strings.ReplaceAll(m, "SHELL", ""), wsSesion)
+
+		} else if ms[0] == "SLEEP" {
+			second, err := time.ParseDuration(ms[1])
+			if err != nil {
+				log.Logger.Error("parse int error :", err)
+			}
+			time.Sleep(second)
+		}
+	}
+
 }
 
 func check(wsSesion *session.WsSesion, url string) {
@@ -264,156 +293,6 @@ func NewSession(client *ssh.Client, wsSesion *session.WsSesion) *session.Jumpser
 	}()
 
 	return jumpserverSession
-}
-
-/*func (session *SSHSession) Close() {
-	close(session.In.Input)
-	for {
-		select {
-		case <-session.out.out:
-		case <-time.After(10 * time.Second):
-			{
-
-				close(session.out.out)
-				session.Close()
-			}
-
-		}
-
-	}
-	close(session.out.out)
-
-	session.Close()
-}*/
-
-func GetSftp(client *ssh.Client) *sftp.Client {
-	sftp, err := sftp.NewClient(client)
-	if err != nil {
-		log.Logger.Error("GetSftp.error", err)
-	}
-	return sftp
-}
-
-const Separator = "/"
-
-/**
-上传目录
-*/
-func UploadPath(client *ssh.Client, localPath, remotePath string) {
-	sftp := GetSftp(client)
-	defer sftp.Close()
-	uploadPath(localPath, sftp, remotePath)
-}
-
-/**
-上传目录子方法
-*/
-func uploadPath(file string, sftp *sftp.Client, remotePath string) {
-	inputFile, inputError := os.Open(file)
-	if inputError != nil {
-		log.Logger.Error(os.Stderr, "File Error: %s\n", inputError)
-	}
-
-	fileInfo, err := inputFile.Stat()
-	if err != nil {
-		log.Logger.Error("fileinfo err:", err)
-	}
-	defer inputFile.Close()
-
-	if fileInfo.IsDir() {
-		//mkdir
-		path := remotePath + Separator + fileInfo.Name()
-		sftp.Mkdir(path)
-		log.Logger.Error(path)
-
-		fileInfo, err := inputFile.Readdir(-1)
-		if err == nil {
-			for _, f := range fileInfo {
-
-				uploadPath(file+Separator+f.Name(), sftp, path)
-
-			}
-		}
-
-	} else {
-		//copy file
-		log.Logger.Info(remotePath + Separator + fileInfo.Name())
-		uploadFile(sftp, file, remotePath+Separator+fileInfo.Name())
-	}
-
-}
-
-/**
-上传文件
-*/
-func uploadFile(sftp *sftp.Client, localFile, remotePath string) {
-	log.Logger.Info(localFile, ",", remotePath)
-	// leave your mark
-	inputFile, inputError := os.Open(localFile)
-	//fileInfo , err := inputFile.Stat();
-	defer inputFile.Close()
-	log.Logger.Info(remotePath)
-	f, err := sftp.Create(remotePath)
-
-	if err != nil {
-		log.Logger.Error("sftp.Create.err", err)
-	}
-
-	if inputError != nil {
-		log.Logger.Error("File Error: %s\n", inputError)
-	}
-
-	fileReader := bufio.NewReader(inputFile)
-	counter := 0
-	for {
-		buf := make([]byte, 20480)
-		n, err := fileReader.Read(buf)
-		if err == io.EOF {
-			break
-		}
-		counter++
-		//fmt.log.Logger.Logger.f("%d,%s", n, string(buf))
-		if n == 0 {
-			break
-		}
-		//fmt.log.Logger.Logger.ln(string(buf))
-		if _, err := f.Write(buf[0:n]); err != nil {
-			log.Logger.Error(err)
-		}
-
-	}
-	// check it's there
-	fi, err := sftp.Lstat(remotePath)
-	if err != nil {
-		log.Logger.Error("sftp.Lstat.error", err)
-	}
-	log.Logger.Info(fi)
-
-}
-
-/**
-删除文件
-*/
-func RemoveFile(remoateFile string, sftp *sftp.Client) {
-	err := sftp.Remove(remoateFile)
-	if err != nil {
-		log.Logger.Error(err)
-	}
-}
-
-/**
-查看文件列表
-*/
-func ListPath(sftp *sftp.Client, remotePath string) {
-	//defer sftp.Close()
-	// walk a directory
-	w := sftp.Walk(remotePath)
-	for w.Step() {
-		if w.Err() != nil {
-			continue
-		}
-		log.Logger.Info(w.Path())
-	}
 }
 
 func CheckErr(err error, msg string) {
