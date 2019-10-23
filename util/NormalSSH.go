@@ -16,8 +16,8 @@ import (
 
 var (
 	ServerMap map[string]*ssh.Client
-	KeyPath   = "build/key/"
-	//ips = []string{""}
+	KeyPath   = "/Users/jiashiran/go/src/jumpserver-automation/build/key/"
+	//ips = []string{"39.105.202.8","39.107.243.195","39.96.50.197","123.56.17.69","47.95.241.44","47.94.130.119","47.93.218.38","101.200.52.2"}
 )
 
 type RemoteOutPut struct {
@@ -93,6 +93,84 @@ func GetSSHClient(conf *SSHConfig) (*ssh.Client, error) {
 	return client, nil
 }
 
+type Input struct {
+	Comman chan string
+}
+
+func (input Input) Read(p []byte) (n int, err error) {
+	log.Println("wait read...")
+	str, isOpen := <-input.Comman
+	if !isOpen {
+		return 0, io.EOF
+	}
+	if strings.Index(str, "\n") <= 0 {
+		str = str + "\n"
+	}
+	log.Println("receive command:", str)
+	if str == io.EOF.Error() {
+		return 0, io.EOF
+	}
+	if str == "" {
+		return 0, nil
+	}
+	bytes := []byte(str)
+	for i, b := range bytes {
+		p[i] = b
+	}
+	return len(bytes), nil
+}
+
+type Output struct {
+	Result chan string
+}
+
+func (output Output) Write(p []byte) (n int, err error) {
+	output.Result <- string(p)
+	return len(p), nil
+}
+
+func NewSessionWithChan(client *ssh.Client, wsSesion *session.WsSesion) (*ssh.Session, chan string, chan string, func(duration time.Duration)) {
+	session, err := client.NewSession()
+	if err != nil {
+		panic("Failed to create session: " + err.Error())
+	}
+	session.Setenv("LANG", "zh_CN.UTF-8")
+	var in Input = Input{make(chan string)}
+	session.Stdin = in
+	var out Output = Output{make(chan string, 100)}
+	session.Stdout = out
+	go func(s *ssh.Session) {
+		err = s.Shell()
+		CheckErr(err, "session shell")
+		err = s.Wait()
+		CheckErr(err, "session wait")
+		log.Println("session over")
+	}(session)
+	echo := func(duration time.Duration) {
+		for {
+			select {
+			case msg, isOpen := <-out.Result:
+				if isOpen {
+					wsSesion.C.Emit("chat", msg)
+					//log.Println(msg)
+					if msg == "close channel session" {
+						goto CLOSE
+					}
+					break
+				} else {
+					goto CLOSE
+				}
+			case <-time.After(duration):
+				goto CLOSE
+			}
+		}
+	CLOSE:
+		log.Println("close channel session")
+	}
+
+	return session, in.Comman, out.Result, echo
+}
+
 /**
 执行脚本
 */
@@ -112,6 +190,7 @@ func ExecuteShellWithChan(client *ssh.Client, shell string, wsSesion *session.Ws
 	}
 	defer session.Close()
 	session.Setenv("LANG", "zh_CN.UTF-8")
+
 	// Once a Session is created, you can execute a single command on
 	// the remote side using the Run method.
 	var b []byte

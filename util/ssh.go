@@ -140,7 +140,12 @@ func ExecuteWithServer(wsSesion *session.WsSesion, task string, server SSHServer
 		log.Logger.Error(err)
 	}
 	defer client.Close()
+	session, in, out, echo := NewSessionWithChan(client, wsSesion)
+	defer session.Close()
+	defer close(in)
+	defer close(out)
 	commands := strings.Split(task, "\n")
+	start := time.Now().UnixNano()
 	for i, m := range commands {
 		m = delete_extra_space(m)
 		log.Logger.Info(i, m)
@@ -152,10 +157,12 @@ func ExecuteWithServer(wsSesion *session.WsSesion, task string, server SSHServer
 			ms[i] = strings.Replace(m, " ", "", -1)
 		}
 		if ms[0] == "SHELL" {
-			log.Logger.Info("shell")
+			//log.Logger.Info("shell")
 			//wsSesion.Session.SendCommand(strings.ReplaceAll(m, "SHELL", ""))
-			ExecuteShellWithChan(client, strings.ReplaceAll(m, "SHELL", ""), wsSesion)
-
+			//ExecuteShellWithChan(client, strings.ReplaceAll(m, "SHELL", ""), wsSesion)
+			command := strings.ReplaceAll(m, "SHELL", "")
+			wsSesion.C.Emit("chat", command+"\n")
+			in <- command
 		} else if ms[0] == "SLEEP" {
 			second, err := time.ParseDuration(ms[1])
 			if err != nil {
@@ -164,7 +171,12 @@ func ExecuteWithServer(wsSesion *session.WsSesion, task string, server SSHServer
 			time.Sleep(second)
 		}
 	}
-
+	end := time.Now().UnixNano()
+	log.Logger.Info(end, start)
+	t := 3000000000 + (end - start)
+	d, _ := time.ParseDuration(fmt.Sprint(t) + "ns")
+	echo(d)
+	log.Logger.Info("execute over")
 }
 
 func check(wsSesion *session.WsSesion, url string) {
