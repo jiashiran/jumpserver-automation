@@ -2,7 +2,7 @@
     <label style="color: red;font-family: 'Arial Hebrew Scholar'">环境：</label><select id="select_type" onchange="showhidediv(this.options[this.options.selectedIndex].value)"><option>product</option><option>test or dev</option></select>
     <hr/>
     <div id="loginDiv" style="float: left">
-        &nbsp;&nbsp;Jumpserver：<select id="select_jumpserver"><option>jumpserver1</option><option>jumpserver2</option></select>
+        &nbsp;&nbsp;Jumpserver：<select id="select_jumpserver"><option>Cticloud</option><option>Clink</option></select>
         &nbsp;&nbsp;Jumpserver Username：<input id="user" type="text"  autocomplete="on"/>
         &nbsp;&nbsp;Password：<input id="password" type="password" />
         <button id="loginButton" onclick="login()" >登录</button>
@@ -60,7 +60,7 @@
         &nbsp;&nbsp;
         新建任务组：<input id="test_taskGroupName" type="text" />
         新建任务名：<input id="test_taskName" type="text" />
-        <input type="hidden" id="test_args" type="text" size="35">
+        <input id="test_args" type="text" size="70">
         server:<select id="ssh_servers" ><option>select</option></select>
     <button onclick="test_save()" style="color: chocolate">新建任务</button>&nbsp;&nbsp;&nbsp;&nbsp;
     </span>
@@ -96,7 +96,7 @@
     });
     // read events from the server
     socket.On("chat", function (msg) {
-        console.log(msg);
+        //console.log(msg);
         addMessage(msg);
     });
     function addMessage(msg) {
@@ -113,8 +113,11 @@
             console.log(msg);
             document.getElementById("testSessionId").value = msg;
         }
-
-        output.innerHTML += msg + "\n";
+        if(output.innerHTML.length > 50000){
+            output.innerHTML = msg + "\n" ;
+        }else {
+            output.innerHTML += msg + "\n" ;
+        }
         add();
         if(msg.indexOf("[MFA auth]:") != -1){
             document.getElementById("mfa").value = msg
@@ -590,11 +593,11 @@
         var name = obj.options[index].text;
         var group = getTestGroup();
         var task =  document.getElementById("task").value;
-
-        console.log(group,name);
+        var args = document.getElementById("test_args").value;
+        console.log(group,name,args);
 
         var xhr = new XMLHttpRequest();
-        xhr.open('POST', '/updateTestTask?name='+name+"&group="+group+"&sessionId="+document.getElementById("sessionId").value);
+        xhr.open('POST', '/updateTestTask?name='+name+"&group="+group+"&args="+args+"&sessionId="+document.getElementById("sessionId").value);
         xhr.setRequestHeader("Content-type","application/text");
         xhr.send(task);
         xhr.onreadystatechange = function () {
