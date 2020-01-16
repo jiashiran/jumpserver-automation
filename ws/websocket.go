@@ -1,7 +1,9 @@
 package ws
 
 import (
+	"bufio"
 	"encoding/json"
+	"fmt"
 	"github.com/kataras/iris"
 	"github.com/kataras/iris/context"
 	iris_recover "github.com/kataras/iris/middleware/recover"
@@ -13,6 +15,7 @@ import (
 	"jumpserver-automation/util"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
 	"strings"
 	"sync"
 )
@@ -26,10 +29,10 @@ func Service() {
 	app := iris.New()
 	app.Use(iris_recover.New())
 	app.Get("/", func(ctx iris.Context) {
-		ctx.ServeFile("static/websockets.html", true) // second parameter: enable gzip?
+		ctx.ServeFile("/Users/jiashiran/go/src/jumpserver-automation/static/websockets.html", true) // second parameter: enable gzip?
 	})
 	app.Get("/help", func(ctx iris.Context) {
-		ctx.ServeFile("static/help.html", true) // second parameter: enable gzip?
+		ctx.ServeFile("/Users/jiashiran/go/src/jumpserver-automation/static/help.html", true) // second parameter: enable gzip?
 	})
 
 	app.Get("/taskGroups/list", func(context context.Context) {
@@ -169,8 +172,7 @@ func Service() {
 		wsSesion, ok := cons.Load(sessionId)
 		if ok {
 			ws := wsSesion.(*session.WsSesion)
-			ws.OUT <- "close channel session"
-			//close(ws.Session.Out.Out)
+			ws.F.WriteString("close channel session\n")
 			close(ws.Session.In.In)
 			ws.Session.Close()
 			ws.Session = nil
@@ -233,7 +235,12 @@ func handleConnection(c websocket.Connection) {
 		wsSesion, ok := cons.Load(c.ID())
 		if !ok {
 			var loginServer uint32 = 1
-			wsSesion = &session.WsSesion{ID: c.ID(), OUT: make(chan string, 500), IN: make(chan string), LoginServer: &loginServer}
+			logFile, err := os.Create("/usr/local/db/logs/" + c.ID() + ".log")
+			if err != nil {
+				fmt.Println("os.Create err :", err)
+			}
+			logFileRead, _ := os.Open("/usr/local/db/logs/" + c.ID() + ".log")
+			wsSesion = &session.WsSesion{ID: c.ID(), LogFile: logFile, LogFileRead: logFileRead, F: bufio.NewWriterSize(logFile, 4096*10), ReadLog: bufio.NewReader(logFileRead), IN: make(chan string), LoginServer: &loginServer}
 			cons.Store(c.ID(), wsSesion)
 			ws = wsSesion.(*session.WsSesion)
 			ws.C = c
@@ -252,11 +259,11 @@ func handleConnection(c websocket.Connection) {
 			ms := strings.Split(msg, "|")
 			go func() {
 				ws.C = c
-				jumpserverIp := "1"
-				jumpserverPort := 22
-				if len(ms) > 3 && ms[3] == "" {
-					jumpserverIp = "2"
-					jumpserverPort = 22
+				jumpserverIp := "112.64.182.30"
+				jumpserverPort := 50005
+				if len(ms) > 3 && ms[3] == "Clink" {
+					jumpserverIp = "119.40.32.58"
+					jumpserverPort = 62015
 				}
 				client, jumpserverSession := util.Jump(ms[1], ms[2], jumpserverIp, jumpserverPort, c, ws)
 				if client == nil {
@@ -289,13 +296,15 @@ func handleConnection(c websocket.Connection) {
 				}
 			}()
 			ws := wsSesion.(*session.WsSesion)
-			ws.OUT <- "close channel session"
+			ws.F.WriteString("close channel session\n")
 			close(ws.Session.In.In)
-			close(ws.Session.Out.Out)
 			ws.Session.Close()
 			ws.Client.Close()
 			ws.Session = nil
 			ws.Client = nil
+			ws.LogFile.Close()
+			ws.LogFileRead.Close()
+			os.Remove("/usr/local/db/logs/" + c.ID() + ".log")
 		}
 		cons.Delete(c.ID())
 		log.Logger.Info("delete session:", c.ID())

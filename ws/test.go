@@ -155,7 +155,10 @@ func AddTestFunction(app *iris.Application) {
 		params := param(uri)
 		name := params["name"]
 		group := params["group"]
-
+		args := params["args"]
+		if args != "" {
+			store.UpdateWithBucket(buildJobArgsFullName(group, name), args, store.TestBucket)
+		}
 		body, err := ioutil.ReadAll(context.Request().Body)
 		log.Logger.Info("updat test task :", name, group, string(body))
 		if err != nil {
