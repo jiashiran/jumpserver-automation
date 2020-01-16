@@ -259,11 +259,11 @@ func handleConnection(c websocket.Connection) {
 			ms := strings.Split(msg, "|")
 			go func() {
 				ws.C = c
-				jumpserverIp := "112.64.182.30"
-				jumpserverPort := 50005
-				if len(ms) > 3 && ms[3] == "Clink" {
-					jumpserverIp = "119.40.32.58"
-					jumpserverPort = 62015
+				jumpserverIp := " "
+				jumpserverPort := 0
+				if len(ms) > 3 && ms[3] == "" {
+					jumpserverIp = " "
+					jumpserverPort = 1
 				}
 				client, jumpserverSession := util.Jump(ms[1], ms[2], jumpserverIp, jumpserverPort, c, ws)
 				if client == nil {
