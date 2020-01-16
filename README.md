@@ -11,5 +11,5 @@ cd build
 
 ## run
 ```
-docker run -d --net=host --restart=always -v /usr/local/db/:/usr/local/db/ 7a9eb58432dd
+docker run -d --name jumpserver-auto --net=host --restart=always -v /usr/local/db/:/usr/local/db/ 7a9eb58432dd
 ```

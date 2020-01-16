@@ -1,12 +1,14 @@
 package session
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"github.com/kataras/iris/websocket"
 	"golang.org/x/crypto/ssh"
 	"io"
 	"jumpserver-automation/log"
+	"os"
 	"strings"
 	"sync/atomic"
 )
@@ -15,11 +17,13 @@ type WsSesion struct {
 	ID          string
 	Client      *ssh.Client
 	Session     *JumpserverSession
-	OUT         chan string //           = make(chan string, 100)
+	LogFile     *os.File
+	LogFileRead *os.File
+	F           *bufio.Writer
+	ReadLog     *bufio.Reader
 	IN          chan string //           = make(chan string)
 	LoginServer *uint32
-
-	C websocket.Connection
+	C           websocket.Connection
 }
 
 type JumpserverSession struct {
@@ -79,17 +83,15 @@ func (in *Input) Read(p []byte) (n int, err error) {
 }
 
 type Output struct {
-	Out               chan string
 	JumpserverSession *JumpserverSession
 }
 
 func (out *Output) Write(p []byte) (n int, err error) {
-	/*defer func() {
+	defer func() {
 		if err := recover(); err != nil {
 			log.Logger.Println("Write error:", err)
-			close(out.Out)
 		}
-	}()*/
+	}()
 	/*if len(p) == 0 {
 		log.Logger.Println("session close")
 		return -1, io.EOF
@@ -108,17 +110,14 @@ func (out *Output) Write(p []byte) (n int, err error) {
 			log.Logger.Info("健康检查", atomic.LoadInt32(out.JumpserverSession.CheckCount))
 			if atomic.LoadInt32(out.JumpserverSession.CheckCount) >= 2 {
 				atomic.StoreUint32(out.JumpserverSession.Health, 1)
-				out.JumpserverSession.WebSesion.OUT <- "健康监测成功"
+				out.JumpserverSession.WebSesion.F.WriteString("健康监测成功\n")
 			}
 		}
-		/*if out.JumpserverSession.CheckURL != "" && out.JumpserverSession.CheckCommand != "" && !strings.Contains(output, out.JumpserverSession.CheckCommand){
 
-		}*/
-		out.JumpserverSession.WebSesion.OUT <- output
-		/*if strings.Contains(output,"nameserver") || strings.Contains(output,"B_") || strings.Contains(output,"VLINK_"){
-			out.JumpserverSession.WebSesion.OUT <- output
-		}*/
-		//log.Logger.Println("output:", output)
+		out.JumpserverSession.WebSesion.F.WriteString(output + "\a")
+		//fmt.Println("F.WriteString:",n,err)
+		out.JumpserverSession.WebSesion.F.Flush()
+		//fmt.Println(output)
 	}
 
 	return len(p), nil

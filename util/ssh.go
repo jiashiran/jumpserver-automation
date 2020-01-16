@@ -1,6 +1,7 @@
 package util
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"github.com/kataras/iris/websocket"
@@ -103,16 +104,16 @@ func Execute(wsSesion *session.WsSesion, task string) {
 		} else if ms[0] == "LB" {
 			ok, msg := OperatLb(m)
 			if !ok {
-				wsSesion.OUT <- msg
+				wsSesion.F.WriteString(msg + "\n")
 				goto OUT
 			} else {
-				wsSesion.OUT <- m + " 操作成功"
+				wsSesion.F.WriteString(m + " 操作成功\n")
 			}
 
 		} else if ms[0] == "LB-INFO" {
 
 			msg := LbINFO(m)
-			wsSesion.OUT <- "LB实例信息：" + msg
+			wsSesion.F.WriteString("LB实例信息：" + msg + "\n")
 
 		} else if ms[0] == "CHECK" {
 
@@ -180,12 +181,10 @@ func ExecuteWithServer(wsSesion *session.WsSesion, task string, server SSHServer
 }
 
 func check(wsSesion *session.WsSesion, url string) {
-	//command := "curl_check=`curl -I -m 10 -o /dev/null -s -w %{http_code} " + url + "`"
-	//wsSesion.Session.SendCommand(command)
 	wsSesion.Session.CheckURL = url + " is 200ok"
 	wsSesion.Session.CheckCommand = "echo `if [[ $curl_check == 200 ]]; then echo \"" + wsSesion.Session.CheckURL + "\"; fi`"
 	atomic.StoreInt32(wsSesion.Session.CheckCount, 0)
-	wsSesion.OUT <- "开始健康监测\n"
+	wsSesion.F.WriteString("开始健康监测\n")
 	for atomic.StoreUint32(wsSesion.Session.Health, 0); atomic.LoadUint32(wsSesion.Session.Health) == 0; {
 		//log.Logger.log.Logger.Logger.ln("check url:", url)
 		wsSesion.Session.SendCommand("curl -I -m 10 -s " + url)
@@ -238,6 +237,7 @@ func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection, wsSesio
 		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 			return nil
 		},
+		Timeout: 10 * time.Second,
 	}
 	var err error = nil
 	defer func() {
@@ -260,7 +260,7 @@ func NewSession(client *ssh.Client, wsSesion *session.WsSesion) *session.Jumpser
 	CheckErr(err, "create new session")
 	in := &session.Input{make(chan string)}
 	sshSession.Stdin = in
-	out := &session.Output{wsSesion.OUT, wsSesion.Session} //todo
+	out := &session.Output{wsSesion.Session} //&session.Output{wsSesion.OUT, wsSesion.Session} //todo
 	sshSession.Stdout = out
 	sshSession.Stderr = os.Stderr
 	sshSession.Setenv("LANG", "zh_CN.UTF-8")
@@ -284,25 +284,26 @@ func NewSession(client *ssh.Client, wsSesion *session.WsSesion) *session.Jumpser
 		CheckErr(err, "session wait")
 		log.Logger.Info("session over")
 	}(sshSession)
-	go func() {
+	go func(ws *session.WsSesion) {
+		buf := bufio.NewReader(ws.ReadLog)
 		for {
-			select {
-			case msg, isOpen := <-wsSesion.OUT:
-				if isOpen {
-					wsSesion.C.Emit("chat", msg)
-					if msg == "close channel session" {
-						goto CLOSE
-					}
-					break
-				} else {
-					goto CLOSE
-				}
-
+			line, err := buf.ReadString('\a')
+			line = strings.Replace(line, "\a", "", -1)
+			line = strings.TrimSpace(line)
+			if err != nil {
+				//fmt.Println("buf.ReadString:",line,err)
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			ws.C.Emit("chat", line)
+			if strings.Contains(line, "close channel session") {
+				goto CLOSE
 			}
 		}
 	CLOSE:
 		log.Logger.Info("close channel session")
-	}()
+
+	}((wsSesion))
 
 	return jumpserverSession
 }
