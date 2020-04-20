@@ -7,7 +7,7 @@ import (
 	"github.com/kataras/iris/websocket"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/terminal"
-	"jumpserver-automation/log"
+	"jumpserver-automation/logs"
 	"jumpserver-automation/session"
 	"net"
 	"os"
@@ -27,7 +27,7 @@ func Jump(user string, password string, ip string, port int, c websocket.Connect
 		Port:     port,
 	}, c, wsSesion)
 	if err != nil {
-		log.Logger.Error("gt client err:", err)
+		logs.Logger.Error("gt client err:", err)
 		return nil, nil
 	}
 
@@ -69,7 +69,7 @@ func Execute(wsSesion *session.WsSesion, task string) {
 
 	for i, m := range commands {
 		m = delete_extra_space(m)
-		log.Logger.Info(i, m)
+		logs.Logger.Info(i, m)
 
 		if strings.Contains(m, "//") {
 			//log.Logger.log.Logger.Logger.ln("注释：",m)
@@ -86,11 +86,11 @@ func Execute(wsSesion *session.WsSesion, task string) {
 		} else if ms[0] == "LOGOUT" {
 
 			for atomic.LoadUint32(wsSesion.LoginServer) > 0 {
-				log.Logger.Info("loginServer:", wsSesion.LoginServer, wsSesion.ID)
+				logs.Logger.Info("loginServer:", wsSesion.LoginServer, wsSesion.ID)
 				err := wsSesion.Session.SendCommand("exit")
-				log.Logger.Error("logout error:", err)
+				logs.Logger.Error("logout error:", err)
 				if err != nil {
-					log.Logger.Error("LOGOUT SendCommand error:", err)
+					logs.Logger.Error("LOGOUT SendCommand error:", err)
 					break
 				}
 				time.Sleep(3 * time.Second)
@@ -98,22 +98,25 @@ func Execute(wsSesion *session.WsSesion, task string) {
 
 		} else if ms[0] == "SHELL" {
 
-			log.Logger.Info("shell")
+			logs.Logger.Info("shell")
 			wsSesion.Session.SendCommand(strings.ReplaceAll(m, "SHELL", ""))
 
 		} else if ms[0] == "LB" {
 			ok, msg := OperatLb(m)
 			if !ok {
 				wsSesion.F.WriteString(msg + "\n")
+				wsSesion.F.Flush()
 				goto OUT
 			} else {
 				wsSesion.F.WriteString(m + " 操作成功\n")
+				wsSesion.F.Flush()
 			}
 
 		} else if ms[0] == "LB-INFO" {
 
 			msg := LbINFO(m)
 			wsSesion.F.WriteString("LB实例信息：" + msg + "\n")
+			wsSesion.F.Flush()
 
 		} else if ms[0] == "CHECK" {
 
@@ -123,7 +126,7 @@ func Execute(wsSesion *session.WsSesion, task string) {
 
 			second, err := time.ParseDuration(ms[1])
 			if err != nil {
-				log.Logger.Error("parse int error :", err)
+				logs.Logger.Error("parse int error :", err)
 			}
 			time.Sleep(second)
 
@@ -138,7 +141,7 @@ OUT:
 func ExecuteWithServer(wsSesion *session.WsSesion, task string, server SSHServer) {
 	client, err := GetSSHClient(&server.Config)
 	if err != nil {
-		log.Logger.Error(err)
+		logs.Logger.Error(err)
 	}
 	defer client.Close()
 	session, in, out, echo := NewSessionWithChan(client, wsSesion)
@@ -149,7 +152,7 @@ func ExecuteWithServer(wsSesion *session.WsSesion, task string, server SSHServer
 	start := time.Now().UnixNano()
 	for i, m := range commands {
 		m = delete_extra_space(m)
-		log.Logger.Info(i, m)
+		logs.Logger.Info(i, m)
 		if strings.Contains(m, "//") {
 			continue
 		}
@@ -167,17 +170,17 @@ func ExecuteWithServer(wsSesion *session.WsSesion, task string, server SSHServer
 		} else if ms[0] == "SLEEP" {
 			second, err := time.ParseDuration(ms[1])
 			if err != nil {
-				log.Logger.Error("parse int error :", err)
+				logs.Logger.Error("parse int error :", err)
 			}
 			time.Sleep(second)
 		}
 	}
 	end := time.Now().UnixNano()
-	log.Logger.Info(end, start)
+	logs.Logger.Info(end, start)
 	t := 3000000000 + (end - start)
 	d, _ := time.ParseDuration(fmt.Sprint(t) + "ns")
 	echo(d)
-	log.Logger.Info("execute over")
+	logs.Logger.Info("execute over")
 }
 
 func check(wsSesion *session.WsSesion, url string) {
@@ -207,7 +210,7 @@ func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection, wsSesio
 	authMethods = append(authMethods, ssh.KeyboardInteractive(func(user, instruction string, questions []string, echos []bool) ([]string, error) {
 		answers := make([]string, 0, len(questions))
 		for i, q := range questions {
-			log.Logger.Info(q)
+			logs.Logger.Info(q)
 			c.Emit("chat", q)
 			if echos[i] {
 				/*scan := bufio.NewScanner(os.Stdin)
@@ -219,7 +222,7 @@ func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection, wsSesio
 					return nil, err
 				}*/
 				MFA := <-wsSesion.IN
-				log.Logger.Info("MFA:", MFA)
+				logs.Logger.Info("MFA:", MFA)
 				answers = append(answers, MFA)
 			} else {
 				b, err := terminal.ReadPassword(int(syscall.Stdin))
@@ -242,13 +245,13 @@ func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection, wsSesio
 	var err error = nil
 	defer func() {
 		if e := recover(); e != nil {
-			log.Logger.Error("ssh Dial error:", e)
+			logs.Logger.Error("ssh Dial error:", e)
 			err = errors.New(fmt.Sprint(e))
 		}
 	}()
 	client, err := ssh.Dial("tcp", conf.Ip+":"+strconv.Itoa(conf.Port), &config)
 	if err != nil {
-		log.Logger.Error("Failed to dial: " + err.Error())
+		logs.Logger.Error("Failed to dial: " + err.Error())
 		return nil, err
 	}
 
@@ -271,7 +274,7 @@ func NewSession(client *ssh.Client, wsSesion *session.WsSesion) *session.Jumpser
 	}
 	err = sshSession.RequestPty("xterm", 100, 200, modes)
 	if err != nil {
-		log.Logger.Error(errors.New("unable request pty  " + err.Error()))
+		logs.Logger.Error(errors.New("unable request pty  " + err.Error()))
 	}
 	var checkCount int32 = 0
 	var health uint32 = 0
@@ -282,26 +285,27 @@ func NewSession(client *ssh.Client, wsSesion *session.WsSesion) *session.Jumpser
 		CheckErr(err, "session shell")
 		err = s.Wait()
 		CheckErr(err, "session wait")
-		log.Logger.Info("session over")
+		logs.Logger.Info("session over")
 	}(sshSession)
 	go func(ws *session.WsSesion) {
 		buf := bufio.NewReader(ws.ReadLog)
 		for {
-			line, err := buf.ReadString('\a')
-			line = strings.Replace(line, "\a", "", -1)
+			line, err := buf.ReadString('\n')
+			//line = strings.Replace(line, "\a", "", -1)
 			line = strings.TrimSpace(line)
-			if err != nil {
+			if err != nil && !strings.Contains(fmt.Sprint(err), "file already closed") {
 				//fmt.Println("buf.ReadString:",line,err)
-				time.Sleep(1 * time.Second)
+				time.Sleep(2 * time.Second)
+				//ws.F.Flush()
 				continue
 			}
 			ws.C.Emit("chat", line)
-			if strings.Contains(line, "close channel session") {
+			if strings.Contains(line, "close channel session") || strings.Contains(fmt.Sprint(err), "file already closed") {
 				goto CLOSE
 			}
 		}
 	CLOSE:
-		log.Logger.Info("close channel session")
+		logs.Logger.Info("close channel session")
 
 	}((wsSesion))
 
@@ -310,6 +314,6 @@ func NewSession(client *ssh.Client, wsSesion *session.WsSesion) *session.Jumpser
 
 func CheckErr(err error, msg string) {
 	if err != nil {
-		log.Logger.Error(msg+" err:", err)
+		logs.Logger.Error(msg+" err:", err)
 	}
 }

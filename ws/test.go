@@ -5,7 +5,7 @@ import (
 	"github.com/kataras/iris"
 	"github.com/kataras/iris/context"
 	"io/ioutil"
-	"jumpserver-automation/log"
+	"jumpserver-automation/logs"
 	"jumpserver-automation/session"
 	"jumpserver-automation/store"
 	"jumpserver-automation/util"
@@ -32,7 +32,7 @@ func AddTestFunction(app *iris.Application) {
 		user := params["user"]
 		password := params["password"]
 		key := params["key"]
-		log.Logger.Info(name, ip, port, password, key)
+		logs.Logger.Info(name, ip, port, password, key)
 		if name == "" || ip == "" || port == "" || (password == "" && key == "") {
 			context.Write([]byte("param error"))
 			return
@@ -45,7 +45,7 @@ func AddTestFunction(app *iris.Application) {
 		k := "SSH_NAME_" + name + "_IP_" + ip + "_"
 		bs, err := json.Marshal(server)
 		if err != nil {
-			log.Logger.Error(err)
+			logs.Logger.Error(err)
 		}
 		store.UpdateWithBucket(k, string(bs), store.TestBucket)
 		m := store.SelectAllWithBucket(store.TestBucket)
@@ -64,7 +64,7 @@ func AddTestFunction(app *iris.Application) {
 		params := param(uri)
 		name := params["name"]
 		ip := params["ip"]
-		log.Logger.Info(name, ip)
+		logs.Logger.Info(name, ip)
 		if name == "" || ip == "" {
 			context.Write([]byte("param error"))
 			return
@@ -101,7 +101,7 @@ func AddTestFunction(app *iris.Application) {
 		newM := make(map[string]string, 0)
 		for k, v := range m {
 			if strings.Contains(k, "JOB_GROUP《") && !strings.Contains(k, "ARG") {
-				log.Logger.Info(k, v)
+				logs.Logger.Info(k, v)
 				values := getJobGroupAndJobName(k)
 				newM[values[0]] = values[1]
 			}
@@ -115,7 +115,7 @@ func AddTestFunction(app *iris.Application) {
 		newM := make(map[string]string, 0)
 		params := param(context.Request().RequestURI)
 		group := params["group"]
-		log.Logger.Info("group:", group)
+		logs.Logger.Info("group:", group)
 		for k, v := range m {
 			if strings.Contains(k, "JOB_GROUP《"+group) && !strings.Contains(k, "ARG") {
 				values := getJobGroupAndJobName(k)
@@ -139,9 +139,9 @@ func AddTestFunction(app *iris.Application) {
 			args = args + ";SSH_Server_Key:" + server
 		}
 		body, err := ioutil.ReadAll(context.Request().Body)
-		log.Logger.Info("add new test task :", name, group, args, server, string(body))
+		logs.Logger.Info("add new test task :", name, group, args, server, string(body))
 		if err != nil {
-			log.Logger.Error(err)
+			logs.Logger.Error(err)
 			context.Write([]byte(err.Error()))
 		} else {
 			store.UpdateWithBucket(buildJobFullName(group, name), string(body), store.TestBucket)
@@ -160,9 +160,9 @@ func AddTestFunction(app *iris.Application) {
 			store.UpdateWithBucket(buildJobArgsFullName(group, name), args, store.TestBucket)
 		}
 		body, err := ioutil.ReadAll(context.Request().Body)
-		log.Logger.Info("updat test task :", name, group, string(body))
+		logs.Logger.Info("updat test task :", name, group, string(body))
 		if err != nil {
-			log.Logger.Error(err)
+			logs.Logger.Error(err)
 			context.Write([]byte(err.Error()))
 		} else {
 			store.UpdateWithBucket(buildJobFullName(group, name), string(body), store.TestBucket)
@@ -176,7 +176,7 @@ func AddTestFunction(app *iris.Application) {
 		params := param(uri)
 		name := params["name"]
 		group := params["group"]
-		log.Logger.Info("get task", name, group)
+		logs.Logger.Info("get task", name, group)
 		args := store.SelectWithBucket(buildJobArgsFullName(group, name), store.TestBucket)
 		body := store.SelectWithBucket(buildJobFullName(group, name), store.TestBucket)
 		result := make(map[string]string)
@@ -193,10 +193,10 @@ func AddTestFunction(app *iris.Application) {
 		params := param(uri)
 		name := params["name"]
 		group := params["group"]
-		log.Logger.Info("delete test task :", name, group)
-		log.Logger.Info(store.SelectWithBucket(buildJobFullName(group, name), store.TestBucket))
+		logs.Logger.Info("delete test task :", name, group)
+		logs.Logger.Info(store.SelectWithBucket(buildJobFullName(group, name), store.TestBucket))
 		store.DeleteWithBucket(buildJobFullName(group, name), store.TestBucket)
-		log.Logger.Info(store.SelectWithBucket(buildJobArgsFullName(group, name), store.TestBucket))
+		logs.Logger.Info(store.SelectWithBucket(buildJobArgsFullName(group, name), store.TestBucket))
 		store.DeleteWithBucket(buildJobArgsFullName(group, name), store.TestBucket)
 		context.Write([]byte(name + " deleted ok"))
 	})
@@ -211,11 +211,11 @@ func AddTestFunction(app *iris.Application) {
 		if ok {
 			var server util.SSHServer
 			args := store.SelectWithBucket(buildJobArgsFullName(group, name), store.TestBucket)
-			log.Logger.Info("execute test task :", name, group, args)
+			logs.Logger.Info("execute test task :", name, group, args)
 			body := store.SelectWithBucket(buildJobFullName(group, name), store.TestBucket)
-			log.Logger.Info(body)
+			logs.Logger.Info(body)
 			argsArray := strings.Split(args, ";")
-			log.Logger.Info(argsArray)
+			logs.Logger.Info(argsArray)
 			for _, arg := range argsArray {
 				kv := strings.Split(arg, ":")
 				if len(kv) == 2 && kv[0] != "" && kv[1] != "" {
@@ -223,10 +223,10 @@ func AddTestFunction(app *iris.Application) {
 				}
 				if kv[0] == "SSH_Server_Key" {
 					s := store.SelectWithBucket(kv[1], store.TestBucket)
-					log.Logger.Info("server:", s)
+					logs.Logger.Info("server:", s)
 					err := json.Unmarshal([]byte(s), &server)
 					if err != nil {
-						log.Logger.Error(err)
+						logs.Logger.Error(err)
 					}
 				}
 			}

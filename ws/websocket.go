@@ -9,10 +9,11 @@ import (
 	iris_recover "github.com/kataras/iris/middleware/recover"
 	"github.com/kataras/iris/websocket"
 	"io/ioutil"
-	"jumpserver-automation/log"
+	"jumpserver-automation/logs"
 	"jumpserver-automation/session"
 	"jumpserver-automation/store"
 	"jumpserver-automation/util"
+	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -24,7 +25,7 @@ var cons sync.Map
 
 func Service() {
 	go func() {
-		log.Logger.Info(http.ListenAndServe(":6060", nil))
+		logs.Logger.Info(http.ListenAndServe(":6060", nil))
 	}()
 	app := iris.New()
 	app.Use(iris_recover.New())
@@ -53,7 +54,7 @@ func Service() {
 		newM := make(map[string]string, 0)
 		params := param(context.Request().RequestURI)
 		group := params["group"]
-		log.Logger.Info("group:", group)
+		logs.Logger.Info("group:", group)
 		for k, v := range m {
 			if strings.Contains(k, "JOB_GROUP《"+group) {
 				values := getJobGroupAndJobName(k)
@@ -73,7 +74,7 @@ func Service() {
 		wsSesion, ok := cons.Load(sessionId)
 		if ok {
 			ws := wsSesion.(*session.WsSesion)
-			log.Logger.Info("get task", id, group, ws.ID)
+			logs.Logger.Info("get task", id, group, ws.ID)
 			m := store.Select(buildJobFullName(group, id))
 			args := store.SelectArgs(buildJobArgsFullName(group, id))
 			result := make(map[string]string)
@@ -98,8 +99,8 @@ func Service() {
 		wsSesion, ok := cons.Load(sessionId)
 		if ok {
 			ws := wsSesion.(*session.WsSesion)
-			log.Logger.Info(ws.ID)
-			log.Logger.Info("execute task :", id)
+			logs.Logger.Info(ws.ID)
+			logs.Logger.Info("execute task :", id)
 			m := store.Select(buildJobFullName(group, id))
 			args := store.SelectArgs(buildJobArgsFullName(group, id))
 			if args != "" {
@@ -128,11 +129,11 @@ func Service() {
 		wsSesion, ok := cons.Load(sessionId)
 		if ok {
 			ws := wsSesion.(*session.WsSesion)
-			log.Logger.Info(ws.ID)
-			log.Logger.Info("update task :", id)
+			logs.Logger.Info(ws.ID)
+			logs.Logger.Info("update task :", id)
 			body, err := ioutil.ReadAll(context.Request().Body)
 			if err != nil {
-				log.Logger.Error(err)
+				logs.Logger.Error(err)
 				context.Write([]byte(err.Error()))
 			} else {
 				store.Update(buildJobFullName(group, id), string(body))
@@ -154,8 +155,8 @@ func Service() {
 		wsSesion, ok := cons.Load(sessionId)
 		if ok {
 			ws := wsSesion.(*session.WsSesion)
-			log.Logger.Info(ws.ID)
-			log.Logger.Info("delete task :", id)
+			logs.Logger.Info(ws.ID)
+			logs.Logger.Info("delete task :", id)
 			store.Delete(buildJobFullName(group, id))
 			store.DeleteArgs(buildJobArgsFullName(group, id))
 			context.Write([]byte(id + " deleted ok"))
@@ -230,7 +231,7 @@ func handleConnection(c websocket.Connection) {
 	// Read events from browser
 	c.On("chat", func(msg string) {
 		// Print the message to the console, c.Context() is the iris's http context.
-		log.Logger.Infof("%s resive sent: %s\n", c.Context().RemoteAddr(), msg)
+		logs.Logger.Infof("%s resive sent: %s\n", c.Context().RemoteAddr(), msg)
 		var ws *session.WsSesion
 		wsSesion, ok := cons.Load(c.ID())
 		if !ok {
@@ -239,18 +240,29 @@ func handleConnection(c websocket.Connection) {
 			if err != nil {
 				fmt.Println("os.Create err :", err)
 			}
+			bufioWriter := bufio.NewWriterSize(logFile, 4096*100)
+			logger := log.New(bufioWriter, "logger: ", log.Lshortfile)
 			logFileRead, _ := os.Open("/usr/local/db/logs/" + c.ID() + ".log")
-			wsSesion = &session.WsSesion{ID: c.ID(), LogFile: logFile, LogFileRead: logFileRead, F: bufio.NewWriterSize(logFile, 4096*10), ReadLog: bufio.NewReader(logFileRead), IN: make(chan string), LoginServer: &loginServer}
+			wsSesion = &session.WsSesion{
+				ID:          c.ID(),
+				LogFile:     logFile,
+				LogFileRead: logFileRead,
+				F:           bufioWriter,
+				ReadLog:     bufio.NewReader(logFileRead),
+				IN:          make(chan string),
+				LoginServer: &loginServer,
+				Logger:      logger,
+			}
 			cons.Store(c.ID(), wsSesion)
 			ws = wsSesion.(*session.WsSesion)
 			ws.C = c
-			log.Logger.Info("create new session:", c.ID())
+			logs.Logger.Info("create new session:", c.ID())
 		} else {
 			ws = wsSesion.(*session.WsSesion)
-			log.Logger.Info(ws.ID, msg)
+			logs.Logger.Info(ws.ID, msg)
 		}
 		if strings.Contains(msg, "test-test-test") {
-			log.Logger.Info("ttt-eee-sss-ttt")
+			logs.Logger.Info("ttt-eee-sss-ttt")
 			c.Emit("chat", "test-test-test:"+c.ID())
 		}
 
@@ -259,15 +271,15 @@ func handleConnection(c websocket.Connection) {
 			ms := strings.Split(msg, "|")
 			go func() {
 				ws.C = c
-				jumpserverIp := " "
+				jumpserverIp := ""
 				jumpserverPort := 0
-				if len(ms) > 3 && ms[3] == "" {
-					jumpserverIp = " "
-					jumpserverPort = 1
+				if len(ms) > 3 && ms[3] == "Clink" {
+					jumpserverIp = ""
+					jumpserverPort = 0
 				}
 				client, jumpserverSession := util.Jump(ms[1], ms[2], jumpserverIp, jumpserverPort, c, ws)
 				if client == nil {
-					log.Logger.Error("logon fail")
+					logs.Logger.Error("logon fail")
 					return
 				}
 				ws := wsSesion.(*session.WsSesion)
@@ -292,7 +304,7 @@ func handleConnection(c websocket.Connection) {
 		if ok {
 			defer func() {
 				if err := recover(); err != nil {
-					log.Logger.Error("close wsSesion error", err)
+					logs.Logger.Error("close wsSesion error", err)
 				}
 			}()
 			ws := wsSesion.(*session.WsSesion)
@@ -302,12 +314,14 @@ func handleConnection(c websocket.Connection) {
 			ws.Client.Close()
 			ws.Session = nil
 			ws.Client = nil
+			ws.F = nil
 			ws.LogFile.Close()
 			ws.LogFileRead.Close()
+			ws.Logger = nil
 			os.Remove("/usr/local/db/logs/" + c.ID() + ".log")
 		}
 		cons.Delete(c.ID())
-		log.Logger.Info("delete session:", c.ID())
+		logs.Logger.Info("delete session:", c.ID())
 	})
 }
 

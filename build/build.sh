@@ -9,8 +9,8 @@ mv app build/
 cp -r static build/
 cd build
 
-docker build -t xxx/dev/jumpserver-autu .
+docker build -t registry.cn-beijing.aliyuncs.com/tinet-dev/jumpserver-autu .
 rm -rf app
 rm -rf static
-docker push xxx/dev/jumpserver-autu
+docker push registry.cn-beijing.aliyuncs.com/tinet-dev/jumpserver-autu
 

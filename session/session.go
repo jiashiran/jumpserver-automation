@@ -7,7 +7,8 @@ import (
 	"github.com/kataras/iris/websocket"
 	"golang.org/x/crypto/ssh"
 	"io"
-	"jumpserver-automation/log"
+	"jumpserver-automation/logs"
+	"log"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -24,6 +25,8 @@ type WsSesion struct {
 	IN          chan string //           = make(chan string)
 	LoginServer *uint32
 	C           websocket.Connection
+
+	Logger *log.Logger
 }
 
 type JumpserverSession struct {
@@ -40,12 +43,12 @@ type JumpserverSession struct {
 func (s *JumpserverSession) SendCommand(command string) (e error) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Logger.Error("SendCommand error:", err)
+			logs.Logger.Error("SendCommand error:", err)
 			e = errors.New(fmt.Sprintf("SendCommand error %s", err))
 		}
 	}()
 	s.In.In <- command
-	log.Logger.Info("send command:", command)
+	logs.Logger.Info("send command:", command)
 	return e
 }
 
@@ -56,11 +59,11 @@ type Input struct {
 func (in *Input) Read(p []byte) (n int, err error) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Logger.Error("Read error:", err)
+			logs.Logger.Error("Read error:", err)
 			close(in.In)
 		}
 	}()
-	log.Logger.Info("wait read...")
+	logs.Logger.Info("wait read...")
 	str, isOpen := <-in.In
 	if !isOpen {
 		return 0, io.EOF
@@ -89,7 +92,7 @@ type Output struct {
 func (out *Output) Write(p []byte) (n int, err error) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Logger.Println("Write error:", err)
+			logs.Logger.Println("Write error:", err)
 		}
 	}()
 	/*if len(p) == 0 {
@@ -107,16 +110,20 @@ func (out *Output) Write(p []byte) (n int, err error) {
 		}
 		if out.JumpserverSession.CheckURL != "" && strings.Contains(output, "HTTP/1.1 200") {
 			atomic.AddInt32(out.JumpserverSession.CheckCount, 1)
-			log.Logger.Info("健康检查", atomic.LoadInt32(out.JumpserverSession.CheckCount))
+			logs.Logger.Info("健康检查", atomic.LoadInt32(out.JumpserverSession.CheckCount))
 			if atomic.LoadInt32(out.JumpserverSession.CheckCount) >= 2 {
 				atomic.StoreUint32(out.JumpserverSession.Health, 1)
 				out.JumpserverSession.WebSesion.F.WriteString("健康监测成功\n")
 			}
 		}
-
+		//out.JumpserverSession.WebSesion.Logger.Println(output)
 		out.JumpserverSession.WebSesion.F.WriteString(output + "\a")
-		//fmt.Println("F.WriteString:",n,err)
 		out.JumpserverSession.WebSesion.F.Flush()
+		//fmt.Println("F.WriteString:",n,err)
+		/*if out.JumpserverSession.WebSesion.F.Buffered() > 4096 * 5{
+
+		}*/
+
 		//fmt.Println(output)
 	}
 

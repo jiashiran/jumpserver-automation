@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/boltdb/bolt"
-	"jumpserver-automation/log"
+	"jumpserver-automation/logs"
 	"time"
 )
 
@@ -20,12 +20,36 @@ func init() {
 	var err error
 	db, err = bolt.Open(DB, 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
-		log.Logger.Error("open database error:", err)
+		logs.Logger.Error("open database error:", err)
 	}
 	if err != nil {
-		log.Logger.Error(err)
+		logs.Logger.Error(err)
 	}
-	log.Logger.Info("create database")
+	logs.Logger.Info("create database")
+	db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists(Bucket)
+		if err != nil {
+			fmt.Println("CreateBucket ", Bucket, "err:", err)
+		}
+		return err
+	})
+	db.Sync()
+	db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists(ArgsBucket)
+		if err != nil {
+			fmt.Println("CreateBucket ", ArgsBucket, "err:", err)
+		}
+		return err
+	})
+	db.Sync()
+	db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists(TestBucket)
+		if err != nil {
+			fmt.Println("CreateBucket ", TestBucket, "err:", err)
+		}
+		return err
+	})
+	db.Sync()
 }
 
 func Update(key string, value string) {
@@ -55,11 +79,7 @@ func Select(key string) string {
 				e = errors.New(fmt.Sprint(err))
 			}
 		}()
-		b, err := tx.CreateBucketIfNotExists(Bucket)
-		if err != nil {
-			log.Logger.Error("Select error:", err)
-			return err
-		}
+		b := tx.Bucket(Bucket)
 		bd = b.Get([]byte(key))
 		return e
 	})
@@ -76,11 +96,7 @@ func SelectArgs(key string) string {
 				e = errors.New(fmt.Sprint(err))
 			}
 		}()
-		b, err := tx.CreateBucketIfNotExists(ArgsBucket)
-		if err != nil {
-			log.Logger.Error("Select error:", err)
-			return err
-		}
+		b := tx.Bucket(Bucket)
 		bd = b.Get([]byte(key))
 		return e
 	})
@@ -91,12 +107,8 @@ func SelectArgs(key string) string {
 func Delete(key string) error {
 	var e error
 	db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists(Bucket)
-		if err != nil {
-			log.Logger.Error("Delete error:", err)
-			return err
-		}
-		err = b.Delete([]byte(key))
+		b := tx.Bucket(Bucket)
+		err := b.Delete([]byte(key))
 		e = err
 		return e
 	})
@@ -106,12 +118,8 @@ func Delete(key string) error {
 func DeleteArgs(key string) error {
 	var e error
 	db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists(ArgsBucket)
-		if err != nil {
-			log.Logger.Error("Delete error:", err)
-			return err
-		}
-		err = b.Delete([]byte(key))
+		b := tx.Bucket(Bucket)
+		err := b.Delete([]byte(key))
 		e = err
 		return e
 	})
@@ -121,11 +129,7 @@ func DeleteArgs(key string) error {
 func SelectAll() map[string]string {
 	m := make(map[string]string)
 	db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists(Bucket)
-		if err != nil {
-			log.Logger.Error("SelectAll error:", err)
-			return err
-		}
+		b := tx.Bucket(Bucket)
 
 		c := b.Cursor()
 
@@ -146,8 +150,8 @@ func Close() {
 
 func UpdateWithBucket(key string, value string, bucket []byte) {
 	db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists(bucket)
-		err = b.Put([]byte(key), []byte(value))
+		b := tx.Bucket(Bucket)
+		err := b.Put([]byte(key), []byte(value))
 		return err
 	})
 	db.Sync()
@@ -162,11 +166,7 @@ func SelectWithBucket(key string, bucket []byte) string {
 				e = errors.New(fmt.Sprint(err))
 			}
 		}()
-		b, err := tx.CreateBucketIfNotExists(bucket)
-		if err != nil {
-			log.Logger.Error("Select error:", err)
-			return err
-		}
+		b := tx.Bucket(Bucket)
 		bd = b.Get([]byte(key))
 		return e
 	})
@@ -177,12 +177,8 @@ func SelectWithBucket(key string, bucket []byte) string {
 func DeleteWithBucket(key string, bucket []byte) error {
 	var e error
 	db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists(bucket)
-		if err != nil {
-			log.Logger.Error("Delete error:", err)
-			return err
-		}
-		err = b.Delete([]byte(key))
+		b := tx.Bucket(Bucket)
+		err := b.Delete([]byte(key))
 		e = err
 		return e
 	})
@@ -192,11 +188,7 @@ func DeleteWithBucket(key string, bucket []byte) error {
 func SelectAllWithBucket(bucket []byte) map[string]string {
 	m := make(map[string]string)
 	db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists(bucket)
-		if err != nil {
-			log.Logger.Error("SelectAll error:", err)
-			return err
-		}
+		b := tx.Bucket(Bucket)
 
 		c := b.Cursor()
 
