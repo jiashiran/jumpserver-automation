@@ -8,6 +8,7 @@ import (
 	"github.com/kataras/iris/context"
 	iris_recover "github.com/kataras/iris/middleware/recover"
 	"github.com/kataras/iris/websocket"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"io/ioutil"
 	"jumpserver-automation/logs"
 	"jumpserver-automation/session"
@@ -34,6 +35,12 @@ func Service() {
 	})
 	app.Get("/help", func(ctx iris.Context) {
 		ctx.ServeFile("/Users/jiashiran/go/src/jumpserver-automation/static/help.html", true) // second parameter: enable gzip?
+	})
+
+	app.Get("/metrics", func(c context.Context) {
+		h := promhttp.Handler()
+
+		h.ServeHTTP(c.ResponseWriter(), c.Request())
 	})
 
 	app.Get("/taskGroups/list", func(context context.Context) {
@@ -272,10 +279,10 @@ func handleConnection(c websocket.Connection) {
 			go func() {
 				ws.C = c
 				jumpserverIp := ""
-				jumpserverPort := 0
+				jumpserverPort := 50005
 				if len(ms) > 3 && ms[3] == "Clink" {
 					jumpserverIp = ""
-					jumpserverPort = 0
+					jumpserverPort = 62015
 				}
 				client, jumpserverSession := util.Jump(ms[1], ms[2], jumpserverIp, jumpserverPort, c, ws)
 				if client == nil {
