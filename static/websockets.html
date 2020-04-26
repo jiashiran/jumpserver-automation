@@ -134,6 +134,7 @@
     }
 
     function login() {
+
         var jumpserverobj = document.getElementById("select_jumpserver");
         var jumpserverindex = jumpserverobj.selectedIndex;
         jumpserver = jumpserverobj.options[jumpserverindex].text;
@@ -292,6 +293,10 @@
     }
 
     function del() {
+        var r = window.confirm("确认删除？");
+        if(r!=true){
+            return
+        }
         var group = getGroup();
 
         var obj = document.getElementById("all_task");
@@ -542,6 +547,10 @@
     }
 
     function delete_ssh_server() {
+        var r = window.confirm("确认删除？");
+        if(r!=true){
+            return
+        }
         var name = document.getElementById("serverName").value;
         var ip = document.getElementById("serverIp").value;
         console.log(name,ip);
@@ -612,6 +621,10 @@
     }
 
     function test_del() {
+        var r = window.confirm("确认删除？");
+        if(r!=true){
+            return
+        }
         var group = getTestGroup();
         var obj = document.getElementById("all_test_task");
         var index = obj.selectedIndex; // 选中索引
