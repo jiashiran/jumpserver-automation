@@ -1,15 +1,12 @@
 package session
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"github.com/kataras/iris/websocket"
 	"golang.org/x/crypto/ssh"
 	"io"
 	"jumpserver-automation/logs"
-	"log"
-	"os"
 	"strings"
 	"sync/atomic"
 )
@@ -18,15 +15,10 @@ type WsSesion struct {
 	ID          string
 	Client      *ssh.Client
 	Session     *JumpserverSession
-	LogFile     *os.File
-	LogFileRead *os.File
-	F           *bufio.Writer
-	ReadLog     *bufio.Reader
 	IN          chan string //           = make(chan string)
 	LoginServer *uint32
 	C           websocket.Connection
-
-	Logger *log.Logger
+	OutChan     chan string
 }
 
 type JumpserverSession struct {
@@ -113,17 +105,10 @@ func (out *Output) Write(p []byte) (n int, err error) {
 			logs.Logger.Info("健康检查", atomic.LoadInt32(out.JumpserverSession.CheckCount))
 			if atomic.LoadInt32(out.JumpserverSession.CheckCount) >= 2 {
 				atomic.StoreUint32(out.JumpserverSession.Health, 1)
-				out.JumpserverSession.WebSesion.F.WriteString("健康监测成功\n")
+				out.JumpserverSession.WebSesion.OutChan <- "健康监测成功\n"
 			}
 		}
-		//out.JumpserverSession.WebSesion.Logger.Println(output)
-		out.JumpserverSession.WebSesion.F.WriteString(output + "\a")
-		out.JumpserverSession.WebSesion.F.Flush()
-		//fmt.Println("F.WriteString:",n,err)
-		/*if out.JumpserverSession.WebSesion.F.Buffered() > 4096 * 5{
-
-		}*/
-
+		out.JumpserverSession.WebSesion.OutChan <- output
 		//fmt.Println(output)
 	}
 

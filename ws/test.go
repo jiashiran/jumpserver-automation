@@ -101,7 +101,7 @@ func AddTestFunction(app *iris.Application) {
 		newM := make(map[string]string, 0)
 		for k, v := range m {
 			if strings.Contains(k, "JOB_GROUP《") && !strings.Contains(k, "ARG") {
-				logs.Logger.Info(k, v)
+				logs.Logger.Debug(k, v)
 				values := getJobGroupAndJobName(k)
 				newM[values[0]] = values[1]
 			}
@@ -115,7 +115,7 @@ func AddTestFunction(app *iris.Application) {
 		newM := make(map[string]string, 0)
 		params := param(context.Request().RequestURI)
 		group := params["group"]
-		logs.Logger.Info("group:", group)
+		logs.Logger.Debug("group:", group)
 		for k, v := range m {
 			if strings.Contains(k, "JOB_GROUP《"+group) && !strings.Contains(k, "ARG") {
 				values := getJobGroupAndJobName(k)

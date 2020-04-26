@@ -130,14 +130,11 @@ func SelectAll() map[string]string {
 	m := make(map[string]string)
 	db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(Bucket)
-
 		c := b.Cursor()
-
 		for k, v := c.First(); k != nil; k, v = c.Next() {
 			//fmt.Printf("key=%s, value=%s\n", k, v)
 			m[string(k)] = string(v)
 		}
-
 		return nil
 	})
 	db.Sync()
@@ -189,14 +186,11 @@ func SelectAllWithBucket(bucket []byte) map[string]string {
 	m := make(map[string]string)
 	db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(Bucket)
-
 		c := b.Cursor()
-
 		for k, v := c.First(); k != nil; k, v = c.Next() {
 			//fmt.Printf("key=%s, value=%s\n", k, v)
 			m[string(k)] = string(v)
 		}
-
 		return nil
 	})
 	db.Sync()

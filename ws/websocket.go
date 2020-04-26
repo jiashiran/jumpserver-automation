@@ -1,7 +1,6 @@
 package ws
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"github.com/kataras/iris"
@@ -14,10 +13,9 @@ import (
 	"jumpserver-automation/session"
 	"jumpserver-automation/store"
 	"jumpserver-automation/util"
-	"log"
 	"net/http"
 	_ "net/http/pprof"
-	"os"
+	"runtime"
 	"strings"
 	"sync"
 )
@@ -61,7 +59,7 @@ func Service() {
 		newM := make(map[string]string, 0)
 		params := param(context.Request().RequestURI)
 		group := params["group"]
-		logs.Logger.Info("group:", group)
+		logs.Logger.Debug("group:", group)
 		for k, v := range m {
 			if strings.Contains(k, "JOB_GROUP《"+group) {
 				values := getJobGroupAndJobName(k)
@@ -81,7 +79,7 @@ func Service() {
 		wsSesion, ok := cons.Load(sessionId)
 		if ok {
 			ws := wsSesion.(*session.WsSesion)
-			logs.Logger.Info("get task", id, group, ws.ID)
+			logs.Logger.Debug("get task", id, group, ws.ID)
 			m := store.Select(buildJobFullName(group, id))
 			args := store.SelectArgs(buildJobArgsFullName(group, id))
 			result := make(map[string]string)
@@ -180,7 +178,7 @@ func Service() {
 		wsSesion, ok := cons.Load(sessionId)
 		if ok {
 			ws := wsSesion.(*session.WsSesion)
-			ws.F.WriteString("close channel session\n")
+			ws.OutChan <- "close channel session\n"
 			close(ws.Session.In.In)
 			ws.Session.Close()
 			ws.Session = nil
@@ -210,6 +208,10 @@ func getJobGroupAndJobName(key string) []string {
 	key = strings.Replace(key, "JOB_GROUP《", "", -1)
 	key = strings.Replace(key, "》_END", "", -1)
 	values := strings.Split(key, "》JOB_NAME《")
+	if len(values) == 1 {
+		fmt.Println(key)
+		values = append(values, "1")
+	}
 	return values
 }
 
@@ -243,22 +245,11 @@ func handleConnection(c websocket.Connection) {
 		wsSesion, ok := cons.Load(c.ID())
 		if !ok {
 			var loginServer uint32 = 1
-			logFile, err := os.Create("/usr/local/db/logs/" + c.ID() + ".log")
-			if err != nil {
-				fmt.Println("os.Create err :", err)
-			}
-			bufioWriter := bufio.NewWriterSize(logFile, 4096*100)
-			logger := log.New(bufioWriter, "logger: ", log.Lshortfile)
-			logFileRead, _ := os.Open("/usr/local/db/logs/" + c.ID() + ".log")
 			wsSesion = &session.WsSesion{
 				ID:          c.ID(),
-				LogFile:     logFile,
-				LogFileRead: logFileRead,
-				F:           bufioWriter,
-				ReadLog:     bufio.NewReader(logFileRead),
 				IN:          make(chan string),
 				LoginServer: &loginServer,
-				Logger:      logger,
+				OutChan:     make(chan string, 9999999),
 			}
 			cons.Store(c.ID(), wsSesion)
 			ws = wsSesion.(*session.WsSesion)
@@ -269,7 +260,7 @@ func handleConnection(c websocket.Connection) {
 			logs.Logger.Info(ws.ID, msg)
 		}
 		if strings.Contains(msg, "test-test-test") {
-			logs.Logger.Info("ttt-eee-sss-ttt")
+			//logs.Logger.Info("ttt-eee-sss-ttt")
 			c.Emit("chat", "test-test-test:"+c.ID())
 		}
 
@@ -280,7 +271,7 @@ func handleConnection(c websocket.Connection) {
 				ws.C = c
 				jumpserverIp := ""
 				jumpserverPort := 50005
-				if len(ms) > 3 && ms[3] == "Clink" {
+				if len(ms) > 3 && ms[3] == "C" {
 					jumpserverIp = ""
 					jumpserverPort = 62015
 				}
@@ -315,17 +306,20 @@ func handleConnection(c websocket.Connection) {
 				}
 			}()
 			ws := wsSesion.(*session.WsSesion)
-			ws.F.WriteString("close channel session\n")
-			close(ws.Session.In.In)
-			ws.Session.Close()
-			ws.Client.Close()
+			ws.OutChan <- "close channel session\n"
+			close(ws.IN)
+			close(ws.OutChan)
+			if ws.Session != nil {
+				close(ws.Session.In.In)
+				ws.Session.Close()
+			}
+			if ws.Client != nil {
+				ws.Client.Close()
+			}
 			ws.Session = nil
 			ws.Client = nil
-			ws.F = nil
-			ws.LogFile.Close()
-			ws.LogFileRead.Close()
-			ws.Logger = nil
-			os.Remove("/usr/local/db/logs/" + c.ID() + ".log")
+			ws.OutChan = nil
+			runtime.GC()
 		}
 		cons.Delete(c.ID())
 		logs.Logger.Info("delete session:", c.ID())

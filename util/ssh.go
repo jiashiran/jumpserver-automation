@@ -1,7 +1,6 @@
 package util
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"github.com/kataras/iris/websocket"
@@ -104,19 +103,16 @@ func Execute(wsSesion *session.WsSesion, task string) {
 		} else if ms[0] == "LB" {
 			ok, msg := OperatLb(m)
 			if !ok {
-				wsSesion.F.WriteString(msg + "\n")
-				wsSesion.F.Flush()
+				wsSesion.OutChan <- msg + "\n"
 				goto OUT
 			} else {
-				wsSesion.F.WriteString(m + " 操作成功\n")
-				wsSesion.F.Flush()
+				wsSesion.OutChan <- msg + "\n"
 			}
 
 		} else if ms[0] == "LB-INFO" {
 
 			msg := LbINFO(m)
-			wsSesion.F.WriteString("LB实例信息：" + msg + "\n")
-			wsSesion.F.Flush()
+			wsSesion.OutChan <- msg + "\n"
 
 		} else if ms[0] == "CHECK" {
 
@@ -187,7 +183,7 @@ func check(wsSesion *session.WsSesion, url string) {
 	wsSesion.Session.CheckURL = url + " is 200ok"
 	wsSesion.Session.CheckCommand = "echo `if [[ $curl_check == 200 ]]; then echo \"" + wsSesion.Session.CheckURL + "\"; fi`"
 	atomic.StoreInt32(wsSesion.Session.CheckCount, 0)
-	wsSesion.F.WriteString("开始健康监测\n")
+	wsSesion.OutChan <- "开始健康监测\n"
 	for atomic.StoreUint32(wsSesion.Session.Health, 0); atomic.LoadUint32(wsSesion.Session.Health) == 0; {
 		//log.Logger.log.Logger.Logger.ln("check url:", url)
 		wsSesion.Session.SendCommand("curl -I -m 10 -s " + url)
@@ -288,27 +284,17 @@ func NewSession(client *ssh.Client, wsSesion *session.WsSesion) *session.Jumpser
 		logs.Logger.Info("session over")
 	}(sshSession)
 	go func(ws *session.WsSesion) {
-		buf := bufio.NewReader(ws.ReadLog)
 		for {
-			line, err := buf.ReadString('\n')
-			//line = strings.Replace(line, "\a", "", -1)
+			line := <-wsSesion.OutChan
 			line = strings.TrimSpace(line)
-			if err != nil && !strings.Contains(fmt.Sprint(err), "file already closed") {
-				//fmt.Println("buf.ReadString:",line,err)
-				time.Sleep(2 * time.Second)
-				//ws.F.Flush()
-				continue
-			}
 			ws.C.Emit("chat", line)
-			if strings.Contains(line, "close channel session") || strings.Contains(fmt.Sprint(err), "file already closed") {
+			if strings.Contains(line, "close channel session") {
 				goto CLOSE
 			}
 		}
 	CLOSE:
 		logs.Logger.Info("close channel session")
-
 	}((wsSesion))
-
 	return jumpserverSession
 }
 
