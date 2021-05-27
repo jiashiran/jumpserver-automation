@@ -96,7 +96,7 @@ func SelectArgs(key string) string {
 				e = errors.New(fmt.Sprint(err))
 			}
 		}()
-		b := tx.Bucket(Bucket)
+		b := tx.Bucket(ArgsBucket)
 		bd = b.Get([]byte(key))
 		return e
 	})
@@ -118,7 +118,7 @@ func Delete(key string) error {
 func DeleteArgs(key string) error {
 	var e error
 	db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket(Bucket)
+		b := tx.Bucket(ArgsBucket)
 		err := b.Delete([]byte(key))
 		e = err
 		return e

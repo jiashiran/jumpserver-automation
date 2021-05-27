@@ -303,7 +303,8 @@
         var index = obj.selectedIndex; // 选中索引
         var id = obj.options[index].text; // 选中文本
         var xhr = new XMLHttpRequest();
-        xhr.open('GET', '/task/delete?id='+id+"&sessionId="+document.getElementById("sessionId").value)+"&group="+group;
+        var url = '/task/delete?id='+id+'&sessionId='+document.getElementById("sessionId").value+'&group='+group;
+        xhr.open('GET', url);
         xhr.send();
         xhr.onreadystatechange = function () {
             if (xhr.readyState == 4) {
