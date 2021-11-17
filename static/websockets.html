@@ -122,6 +122,9 @@
         if(msg.indexOf("[MFA auth]:") != -1){
             document.getElementById("mfa").value = msg
         }
+        if(msg.indexOf("[OTP Code]: ") != -1){
+            document.getElementById("mfa").value = msg
+        }
     }
 
     function add() {
