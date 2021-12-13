@@ -236,6 +236,8 @@ func NewJumpserverClient(conf *JumpserverConfig, c websocket.Connection, wsSesio
 		HostKeyCallback: func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 			return nil
 		},
+		Config: ssh.Config{
+			Ciphers: []string{"aes128-ctr", "aes192-ctr", "aes256-ctr", "arcfour256", "arcfour128", "aes128-cbc", "3des-cbc", "blowfish-cbc", "cast128-cbc", "aes192-cbc", "aes256-cbc", "arcfour"}},
 		Timeout: 10 * time.Second,
 	}
 	var err error = nil

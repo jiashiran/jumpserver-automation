@@ -270,10 +270,10 @@ func handleConnection(c websocket.Connection) {
 			go func() {
 				ws.C = c
 				jumpserverIp := ""
-				jumpserverPort := 50005
-				if len(ms) > 3 && ms[3] == "C" {
+				jumpserverPort := 0
+				if len(ms) > 3 && ms[3] == "" {
 					jumpserverIp = ""
-					jumpserverPort = 62015
+					jumpserverPort = 9
 				}
 				client, jumpserverSession := util.Jump(ms[1], ms[2], jumpserverIp, jumpserverPort, c, ws)
 				if client == nil {
@@ -290,6 +290,8 @@ func handleConnection(c websocket.Connection) {
 
 		} else if strings.Contains(msg, "[MFA auth]: ") {
 			ws.IN <- strings.Replace(msg, "[MFA auth]: ", "", -1)
+		} else if strings.Contains(msg, "[OTP Code]: ") {
+			ws.IN <- strings.Replace(strings.Replace(msg, "[OTP Code]:", "", -1), " ", "", -1)
 		}
 
 		// Write message back to the client message owner with:
